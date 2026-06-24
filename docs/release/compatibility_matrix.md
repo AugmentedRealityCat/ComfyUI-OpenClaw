@@ -40,6 +40,14 @@ This document tracks the current reference anchors and validated environments fo
 - **Frontend host surface**: current sidebar integration contract remains compatible with the standalone frontend reference anchor, while inactive subgraph diagnostics and promoted-widget behavior remain regression-sensitive seams.
 - **Desktop host surface**: desktop currently embeds frontend `1.43.18`, which still lags the standalone frontend `1.47.3` reference. Validate desktop-specific behavior against the desktop anchor instead of assuming standalone-frontend parity.
 
+## Residual Host-Contract Decisions
+
+- **SaveImage output refs**: OpenClaw consumes runtime `/history` output refs and does not infer graph-rewrite behavior from output-node socket shape. `SaveImage` output sockets are allowed to exist without changing the normalized output-ref contract.
+- **3D output refs**: `Load3DAdvanced` and related 3D preview refs remain media-aware output refs. File-like and hash-backed 3D refs stay on the bounded `/view` preview contract; clients without a 3D renderer should show an explicit fallback/link surface.
+- **Asset dimensions and grouped assets**: typed width/height metadata and grouped multi-download behavior are host-frontend display/download concerns. They do not change OpenClaw fetch routing, and asset-service-only identifiers remain explicit `asset_api_required` states rather than implicit `/api/assets` fetches.
+- **Sidebar registration**: prefer the current `sidebarTab.registerSidebarTab` host API and retain the deprecated `extensionManager.registerSidebarTab` fallback for older or desktop-embedded frontend hosts.
+- **Node runtime policy**: the standalone ComfyUI frontend development workspace currently declares `node >=25 <26`, but OpenClaw keeps its package engine at `>=18.0.0` because this custom-node package runs its own Playwright/Vitest harness and does not build the host frontend workspace. OpenClaw acceptance remains governed by `tests/TEST_SOP.md` and `tests/E2E_TESTING_SOP.md`, which require Node.js 18+ and CI-parity validation on the project test harness.
+
 ## Operating Systems
 
 | OS | Status | CI Validation | Notes |
