@@ -7,6 +7,17 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Targeted connector cancellation and host contract guard coverage refreshed</strong></summary>
+
+- Connector `/stop`, `/cancel`, and `/interrupt` commands now keep no-argument global interrupt explicit while routing supplied job IDs through targeted ComfyUI job cancellation.
+- Single-job cancellation on older hosts can fall back only to targeted interrupt; multi-job cancellation failures no longer degrade into a global interrupt.
+- Compatibility guard coverage now documents SaveImage-style output refs, 3D preview refs, typed asset dimensions, grouped asset behavior, sidebar registration fallback, and the OpenClaw Node.js runtime policy.
+- OpenClaw keeps its own package/test harness on Node.js `>=18.0.0` while documenting that standalone ComfyUI frontend development may require a newer Node engine.
+
+</details>
+
+<details>
+
 <summary><strong>Package hygiene, runtime cache ownership, and tool diagnostics tightened</strong></summary>
 
 - Moved developer-only verification helpers out of the repository root and into the dedicated developer tooling area, keeping the custom-node package root focused on shipped package entrypoints and metadata.
