@@ -32,7 +32,7 @@ Newest entries appear first.
 
 <summary><strong>ComfyUI host compatibility, media outputs, model folders, and prompt attribution refreshed</strong></summary>
 
-- Refreshed the published compatibility baseline for ComfyUI `f6c162dd` (`v0.26.0`, pyproject `0.26.0`), standalone frontend `1.47.3`, and Desktop `0.9.4` with core `0.22.3` plus embedded frontend `1.43.18`.
+- Refreshed the published compatibility baseline for ComfyUI `51bf508a` (`v0.27.0-25-g51bf508a`, pyproject `0.27.0`), standalone frontend `1.47.6`, and Desktop `0.9.4` with core `0.22.3` plus embedded frontend `1.43.18`.
 - Reconciled active prompt state after backend or SSE reconnects so completed prompts are not left in the active queue lane after a host recovery.
 - Updated sidebar registration to prefer the current ComfyUI sidebar store API and keep the deprecated frontend facade as a compatibility fallback for older hosts.
 - Aligned Model Manager and preflight diagnostics with current ComfyUI model folder names, including newer managed keys such as `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`, while retaining legacy aliases such as `clip` and `unet`.

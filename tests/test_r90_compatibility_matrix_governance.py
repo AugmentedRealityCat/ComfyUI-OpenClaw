@@ -22,8 +22,8 @@ from services.operator_doctor import DoctorReport, check_compatibility_matrix_go
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CURRENT_ANCHORS = {
-    "comfyui": "f6c162dd (v0.26.0 / pyproject 0.26.0)",
-    "comfyui_frontend": "1.47.3 (f076106ca / v1.47.3-5-gf076106ca)",
+    "comfyui": "51bf508a (v0.27.0-25-g51bf508a / pyproject 0.27.0)",
+    "comfyui_frontend": "1.47.6 (747f76db76 / v1.47.6-53-g747f76db76)",
     "desktop": "0.9.4 (core 0.22.3 / frontend 1.43.18)",
 }
 
