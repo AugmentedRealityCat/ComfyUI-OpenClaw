@@ -3,7 +3,7 @@
  * Tracks prompt execution and displays outputs.
  */
 import { openclawApi } from "../openclaw_api.js";
-import { extractHistoryOutputRefs } from "../openclaw_asset_refs.js";
+import { extractHistoryOutputRefs, isHdrImageOutputRef } from "../openclaw_asset_refs.js";
 import { parseJsonSafe } from "../openclaw_utils.js";
 
 const POLL_INTERVAL_MS = 2000;
@@ -183,6 +183,29 @@ export const jobMonitorTab = {
                     outputGrid.style.marginTop = "8px";
 
                     job.outputs.forEach((out) => {
+                        if (out.media_type === "images" && out.view_url && isHdrImageOutputRef(out)) {
+                            const hdrFallback = document.createElement("div");
+                            hdrFallback.className = "openclaw-job-output-fallback openclaw-job-output-media-fallback openclaw-job-output-hdr-fallback";
+                            hdrFallback.style.width = "110px";
+                            hdrFallback.style.minHeight = "80px";
+                            hdrFallback.style.padding = "6px";
+                            hdrFallback.style.display = "flex";
+                            hdrFallback.style.alignItems = "center";
+                            hdrFallback.style.justifyContent = "center";
+                            hdrFallback.style.textAlign = "center";
+                            hdrFallback.style.fontSize = "10px";
+                            hdrFallback.style.lineHeight = "1.3";
+                            hdrFallback.style.border = "1px dashed var(--border-color)";
+                            hdrFallback.style.borderRadius = "6px";
+                            hdrFallback.style.background = "var(--comfy-menu-bg, rgba(255,255,255,0.04))";
+                            hdrFallback.style.cursor = "pointer";
+                            hdrFallback.title = out.filename;
+                            hdrFallback.textContent = "HDR output available. Open source preview.";
+                            hdrFallback.onclick = () => window.open(out.view_url, "_blank");
+                            outputGrid.appendChild(hdrFallback);
+                            return;
+                        }
+
                         if (out.media_type === "images" && out.view_url) {
                             const img = document.createElement("img");
                             img.src = out.view_url;

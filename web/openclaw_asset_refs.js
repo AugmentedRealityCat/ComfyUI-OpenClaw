@@ -1,5 +1,6 @@
 const PREVIEWABLE_MEDIA_TYPES = new Set(["images", "video", "audio", "3d", "text"]);
 const THREE_D_EXTENSIONS = [".obj", ".fbx", ".gltf", ".glb", ".usdz"];
+const HDR_IMAGE_EXTENSIONS = [".exr", ".hdr"];
 const TEXT_PREVIEW_MAX_LENGTH = 1024;
 
 function pickAssetHash(imageRef = {}) {
@@ -62,6 +63,38 @@ function pickFilename(imageRef = {}) {
 
 function has3dExtension(filename = "") {
     return THREE_D_EXTENSIONS.some((ext) => String(filename).toLowerCase().endsWith(ext));
+}
+
+export function isHdrImageFilename(filename = "") {
+    return HDR_IMAGE_EXTENSIONS.some((ext) => String(filename).toLowerCase().endsWith(ext));
+}
+
+function filenameFromUrl(url = "") {
+    if (!url) {
+        return "";
+    }
+    try {
+        const base = typeof window !== "undefined" && window.location
+            ? window.location.origin
+            : "http://127.0.0.1";
+        const parsed = new URL(url, base);
+        return parsed.searchParams.get("filename") || parsed.pathname.split("/").pop() || "";
+    } catch {
+        return String(url).split("?", 1)[0].split("#", 1)[0].split("/").pop() || "";
+    }
+}
+
+export function isHdrImageOutputRef(outputRef = {}) {
+    if (!outputRef || typeof outputRef !== "object") {
+        return false;
+    }
+    if (outputRef.media_type && outputRef.media_type !== "images") {
+        return false;
+    }
+    if (isHdrImageFilename(outputRef.filename || "")) {
+        return true;
+    }
+    return isHdrImageFilename(filenameFromUrl(outputRef.view_url || ""));
 }
 
 function resolveMediaType(imageRef = {}, fallback = "images") {

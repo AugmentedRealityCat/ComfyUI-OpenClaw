@@ -275,6 +275,91 @@ test.describe('R107 Live Backend Parity', () => {
         expect(assetApiCalls).toBe(0);
     });
 
+    test('Job Monitor renders HDR image outputs as explicit fallbacks', async ({ page }) => {
+        const jobId = "job-hdr-refs";
+        let hdrViewRequests = 0;
+
+        await page.evaluate(() => {
+            window.__openclawOpenedUrls = [];
+            window.open = (url, target) => {
+                window.__openclawOpenedUrls.push({ url, target });
+                return null;
+            };
+        });
+
+        await page.route(`**/history/${jobId}`, async route => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    [jobId]: {
+                        status: { status_str: "success", completed: true },
+                        outputs: {
+                            "9": {
+                                images: [
+                                    { filename: "scene.exr", type: "output" },
+                                    { filename: "studio.hdr", type: "output" },
+                                    { filename: "normal.png", type: "output" },
+                                ],
+                            },
+                        },
+                    },
+                }),
+            });
+        });
+
+        await page.route('**/openclaw/trace/**', async route => {
+            await route.fulfill({
+                status: 404,
+                contentType: 'application/json',
+                body: JSON.stringify({ error: 'not_found' }),
+            });
+        });
+
+        await page.route('**/view**', async route => {
+            const url = new URL(route.request().url());
+            const filename = url.searchParams.get('filename');
+            if (filename === 'scene.exr' || filename === 'studio.hdr') {
+                hdrViewRequests += 1;
+            }
+            if (filename !== 'normal.png') {
+                await route.fallback();
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                contentType: 'image/png',
+                body: TEST_OUTPUT_PNG,
+            });
+        });
+
+        await clickTab(page, 'Jobs');
+        await page.locator('input[placeholder="prompt_id"]').fill(jobId);
+        await page.getByText('Add').click();
+
+        const jobRow = page.locator('.openclaw-job-row').first();
+        await expect(page.locator('.openclaw-kv-val.ok')).toHaveText('completed', { timeout: 10000 });
+        await expect(jobRow.locator('img')).toHaveCount(1);
+        await expect(jobRow.locator('img[src*="normal.png"]')).toBeVisible();
+        await expect(jobRow.locator('img[src*="scene.exr"]')).toHaveCount(0);
+        await expect(jobRow.locator('img[src*="studio.hdr"]')).toHaveCount(0);
+        await expect(jobRow.locator('.openclaw-job-output-hdr-fallback')).toHaveCount(2);
+        await expect(jobRow.locator('.openclaw-job-output-hdr-fallback')).toContainText([
+            'HDR output available',
+            'HDR output available',
+        ]);
+        expect(hdrViewRequests).toBe(0);
+
+        await jobRow.locator('.openclaw-job-output-hdr-fallback').first().click();
+        const openedUrls = await page.evaluate(() => window.__openclawOpenedUrls);
+        expect(openedUrls).toEqual([
+            expect.objectContaining({
+                url: expect.stringContaining('scene.exr'),
+                target: '_blank',
+            }),
+        ]);
+    });
+
     test('Degraded Adapter / Fail Handling', async ({ page }) => {
         // Mock Planner Failure (503 Service Unavailable)
         await page.route('**/openclaw/assist/planner', async route => {

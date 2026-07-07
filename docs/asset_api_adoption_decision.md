@@ -11,6 +11,7 @@
 
 - Current output parsing is media-aware for ComfyUI result groups `images`, `video`, `audio`, `3d`, and bounded `text`.
 - File-like media refs still use `/view` when they provide `filename`, or optional hash-backed preview metadata when the host provides it.
+- HDR `.exr` / `.hdr` image refs stay on the `/view` source-preview contract but render as explicit fallback links because OpenClaw does not embed the host HDR viewer.
 - Text output previews are bounded and rendered as text, not HTML.
 - Asset-service-only identifiers remain explicit fallback states and still do not trigger automatic direct `/api/assets` fetches.
 
@@ -30,6 +31,7 @@
   - classic ComfyUI output refs (`filename`, `subfolder`, `type`)
   - optional asset-hash-backed refs that still resolve through `/view?filename=blake3:...` when host metadata is present
   - media-aware output groups (`images`, `video`, `audio`, `3d`, and bounded `text`)
+  - HDR `.exr` / `.hdr` image refs as explicit `/view` source-preview fallback links, not normal thumbnails
 - Current ComfyUI `51bf508a` / `v0.27.0-25-g51bf508a` / pyproject `0.27.0` reference facts:
   - `/api/assets*` routes exist, but operational use is feature-gated behind `--enable-assets`
   - content hashing is opt-in through `--enable-asset-hashing`, so normal filename-backed refs may omit `asset_hash` / `hash`
@@ -61,6 +63,7 @@
   - classic refs -> `/view?filename=...&type=...`
   - optional asset-hash-backed refs -> `/view?filename=blake3:...` when metadata exists
   - file-like media refs -> `/view` fallback/link surfaces when preview metadata is present
+  - HDR `.exr` / `.hdr` image refs -> explicit source-preview fallback links
   - bounded text refs -> escaped text surfaces, not HTML
 - For refs that expose only asset-service identifiers and are not representable through `/view`:
   - keep them in normalized output payloads

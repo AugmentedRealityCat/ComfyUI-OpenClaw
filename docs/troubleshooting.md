@@ -101,7 +101,7 @@ What this means:
 
 - `asset_api_required` is a bounded compatibility state, not a generic parser failure.
 - Classic history refs should continue to preview normally even when hash metadata is absent. Optional hash-backed refs exposed as `asset_hash` or `hash` still map onto `/view` when ComfyUI host metadata provides them.
-- Current media-aware outputs can include `images`, `video`, `audio`, `3d`, and bounded `text`; images render as thumbnails, text renders as escaped bounded text, and other file-like media may appear as explicit fallback/link tiles instead of image elements.
+- Current media-aware outputs can include `images`, `video`, `audio`, `3d`, and bounded `text`; normal images render as thumbnails, HDR `.exr` / `.hdr` image refs render as explicit source-preview fallback links, text renders as escaped bounded text, and other file-like media may appear as explicit fallback/link tiles instead of image elements.
 - If an operator workflow starts depending on direct asset-service identifiers, treat that as a contract gap and review [`docs/asset_api_adoption_decision.md`](asset_api_adoption_decision.md) before widening the runtime dependency.
 
 ## Verify audit-chain continuity after restart or rotation

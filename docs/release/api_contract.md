@@ -83,6 +83,7 @@ History and output-ref contract:
 - `asset_hash` / `hash` metadata is optional because current ComfyUI host asset hashing is opt-in through `--enable-asset-hashing`; clients MUST NOT require hashes for normal filename-backed previews
 - refs with `asset_hash` or `hash` values, when host metadata provides them, preview through `/view?filename=blake3:...`
 - refs that only expose upstream asset-service identifiers remain explicit `asset_api_required` states; clients MUST NOT silently infer direct `/api/assets` fetching from that marker
+- HDR `.exr` / `.hdr` image refs remain image refs but should be rendered as explicit source-preview fallback links unless the client implements a safe HDR-specific viewer
 - legacy callback/image-only consumers may continue using image-only extraction paths; non-image media refs should be rendered as explicit fallback/link/text surfaces unless the client implements a safe media-specific renderer
 
 ### 1.2 Webhooks & Triggers

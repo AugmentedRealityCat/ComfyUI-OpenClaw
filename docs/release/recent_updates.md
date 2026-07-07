@@ -7,6 +7,15 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Connector media safety and HDR output fallbacks tightened</strong></summary>
+
+- LINE and WhatsApp connector media URLs now force dangerous active content such as SVG/HTML/JS/CSS/XML to download with no-sniff response headers while preserving safe image delivery.
+- Job Monitor now treats HDR `.exr` and `.hdr` image outputs as explicit source-preview fallback links instead of normal thumbnails, matching the current host expectation without bundling a HDR viewer.
+
+</details>
+
+<details>
+
 <summary><strong>Targeted connector cancellation and host contract guard coverage refreshed</strong></summary>
 
 - Connector `/stop`, `/cancel`, and `/interrupt` commands now keep no-argument global interrupt explicit while routing supplied job IDs through targeted ComfyUI job cancellation.

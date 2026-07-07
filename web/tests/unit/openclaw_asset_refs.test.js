@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
     extractHistoryImageRefs,
     extractHistoryOutputRefs,
+    isHdrImageFilename,
+    isHdrImageOutputRef,
     normalizeComfyOutputRef,
 } from "../../openclaw_asset_refs.js";
 
@@ -331,5 +333,32 @@ describe("openclaw asset refs", () => {
         expect(output.media_type).toBe("text");
         expect(output.content).toHaveLength(1024);
         expect(output.text_truncated).toBe(true);
+    });
+
+    it("detects HDR image refs by filename suffix without treating hashes as HDR", () => {
+        expect(isHdrImageFilename("render.EXR")).toBe(true);
+        expect(isHdrImageFilename("studio.hdr")).toBe(true);
+        expect(isHdrImageFilename("studio.hdr.png")).toBe(false);
+
+        expect(isHdrImageOutputRef({
+            filename: "render.exr",
+            media_type: "images",
+            view_url: "/view?filename=blake3:abc123",
+        })).toBe(true);
+        expect(isHdrImageOutputRef({
+            filename: "blake3:abc123",
+            media_type: "images",
+            view_url: "/view?filename=blake3:abc123",
+        })).toBe(false);
+        expect(isHdrImageOutputRef({
+            filename: "",
+            media_type: "images",
+            view_url: "/view?filename=preview.hdr&type=output",
+        })).toBe(true);
+        expect(isHdrImageOutputRef({
+            filename: "mesh.exr",
+            media_type: "3d",
+            view_url: "/view?filename=mesh.exr&type=output",
+        })).toBe(false);
     });
 });
