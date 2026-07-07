@@ -18,6 +18,7 @@ from typing import Optional
 
 from ..config import ConnectorConfig
 from ..contract import CommandRequest, CommandResponse
+from ..media_response import build_connector_media_response
 from ..router import CommandRouter
 from ..security_profile import AllowlistPolicy, ReplayGuard, verify_hmac_signature
 from ..transport_contract import RelayResponseClassifier
@@ -219,7 +220,7 @@ class WhatsAppWebhookServer:
         if not path:
             return web.Response(status=404, text="Media Not Found or Expired")
 
-        return web.FileResponse(path)
+        return build_connector_media_response(web, path)
 
     # ------------------------------------------------------------------
     # Message Processing
