@@ -131,9 +131,10 @@ def normalize_history_output_ref(
     resolution = "asset_api_required" if asset_api_required else "view"
 
     if not asset_api_required:
-        # IMPORTANT: keep OpenClaw on the bounded /view contract. Asset-hash refs
-        # are accepted because they still resolve through /view; do not escalate
-        # asset-api-only identifiers into implicit /api/assets runtime fetches.
+        # IMPORTANT: keep OpenClaw on the bounded /view contract. Optional
+        # asset-hash metadata still resolves through /view when hosts provide it;
+        # do not escalate asset-api-only identifiers into implicit /api/assets
+        # runtime fetches.
         if asset_hash:
             params = {"filename": asset_hash}
         else:

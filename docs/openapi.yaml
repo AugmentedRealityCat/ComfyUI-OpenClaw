@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.12"
+  version: "1.0.13"
   description: "Generated from docs/release/api_contract.md."
 servers:
   - url: "/openclaw"

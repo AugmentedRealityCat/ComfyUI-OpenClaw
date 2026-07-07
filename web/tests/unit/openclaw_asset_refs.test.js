@@ -61,6 +61,37 @@ describe("openclaw asset refs", () => {
         });
     });
 
+    it("keeps filename refs previewable when host omits hash metadata", () => {
+        expect(
+            normalizeComfyOutputRef({
+                filename: "filename-only.png",
+                subfolder: "session-a",
+                type: "output",
+                asset: {
+                    id: "asset-without-hash",
+                },
+            })
+        ).toEqual({
+            filename: "filename-only.png",
+            subfolder: "session-a",
+            type: "output",
+            media_type: "images",
+            asset_hash: "",
+            asset_api_id: "asset-without-hash",
+            asset_api_required: false,
+            resolution: "view",
+            unsupported_reason: "",
+            is_asset_backed: true,
+            content: "",
+            text_truncated: false,
+            viewParams: {
+                filename: "filename-only.png",
+                subfolder: "session-a",
+                type: "output",
+            },
+        });
+    });
+
     it("accepts upload-style nested asset metadata", () => {
         expect(
             normalizeComfyOutputRef({

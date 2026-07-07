@@ -123,7 +123,7 @@ test.describe('R107 Live Backend Parity', () => {
         await expect(page.locator('img[src*="test_img.png"]')).toBeVisible();
     });
 
-    test('Job Monitor keeps the phase-2 asset API no-go contract explicit', async ({ page }) => {
+    test('Job Monitor keeps asset hashing optional and asset API no-go explicit', async ({ page }) => {
         const jobId = "job-asset-phase2";
         let assetApiCalls = 0;
 
@@ -137,6 +137,13 @@ test.describe('R107 Live Backend Parity', () => {
                         outputs: {
                             "9": {
                                 images: [
+                                    {
+                                        filename: "filename-only.png",
+                                        type: "output",
+                                        asset: {
+                                            id: "asset-without-hash",
+                                        },
+                                    },
                                     {
                                         filename: "preview.png",
                                         type: "temp",
@@ -175,12 +182,19 @@ test.describe('R107 Live Backend Parity', () => {
         await page.route('**/view**', async route => {
             const request = route.request();
             const url = new URL(request.url());
-            if (
-                request.method() !== 'GET'
-                || url.searchParams.get('filename') !== 'blake3:abc123'
-                || url.searchParams.has('type')
-                || url.searchParams.has('subfolder')
-            ) {
+            const filename = url.searchParams.get('filename');
+            const isFilenameOnlyPreview = (
+                request.method() === 'GET'
+                && filename === 'filename-only.png'
+                && url.searchParams.get('type') === 'output'
+            );
+            const isHashBackedPreview = (
+                request.method() === 'GET'
+                && filename === 'blake3:abc123'
+                && !url.searchParams.has('type')
+                && !url.searchParams.has('subfolder')
+            );
+            if (!isFilenameOnlyPreview && !isHashBackedPreview) {
                 await route.fallback();
                 return;
             }
@@ -197,6 +211,7 @@ test.describe('R107 Live Backend Parity', () => {
         await page.getByText('Add').click();
 
         await expect(page.locator('.openclaw-kv-val.ok')).toHaveText('completed', { timeout: 10000 });
+        await expect(page.locator('img[src*="filename-only.png"]')).toBeVisible();
         await expect(page.locator('img[src*="blake3%3Aabc123"]')).toBeVisible();
         await expect(page.locator('.openclaw-job-output-fallback')).toContainText('Asset API output requires /api/assets');
         expect(assetApiCalls).toBe(0);

@@ -142,8 +142,9 @@ export function normalizeComfyOutputRef(imageRef = {}, mediaType = "images") {
     const explicitAssetApiRequired = outputRef.asset_api_required === true;
     const assetApiRequired = Boolean(explicitAssetApiRequired || (assetApiId && !assetHash && !namedFilename));
 
-    // IMPORTANT: asset-backed refs still resolve through /view when possible; do
-    // not promote asset-api-only identifiers into implicit /api/assets fetches.
+    // IMPORTANT: optional asset-hash metadata still resolves through /view when
+    // hosts provide it; do not promote asset-api-only identifiers into implicit
+    // /api/assets fetches.
     const viewParams = assetApiRequired
         ? null
         : (

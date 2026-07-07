@@ -104,6 +104,37 @@ class TestComfyUIHistoryParsing(unittest.TestCase):
         self.assertFalse(images[0]["asset_api_required"])
         self.assertEqual(images[0]["resolution"], "view")
 
+    def test_extract_images_filename_refs_do_not_require_asset_hash(self):
+        from services.comfyui_history import extract_images
+
+        history_item = {
+            "outputs": {
+                "2": {
+                    "images": [
+                        {
+                            "filename": "filename-only.png",
+                            "subfolder": "session-a",
+                            "type": "output",
+                            "asset": {
+                                "id": "asset-without-hash",
+                            },
+                        }
+                    ]
+                }
+            }
+        }
+
+        images = extract_images(history_item)
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["filename"], "filename-only.png")
+        self.assertEqual(images[0]["asset_hash"], "")
+        self.assertEqual(images[0]["asset_api_id"], "asset-without-hash")
+        self.assertFalse(images[0]["asset_api_required"])
+        self.assertEqual(images[0]["resolution"], "view")
+        self.assertIn("filename=filename-only.png", images[0]["view_url"])
+        self.assertIn("type=output", images[0]["view_url"])
+        self.assertIn("subfolder=session-a", images[0]["view_url"])
+
     def test_extract_images_accepts_top_level_hash_alias(self):
         from services.comfyui_history import extract_images
 

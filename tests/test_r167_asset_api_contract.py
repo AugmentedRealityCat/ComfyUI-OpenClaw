@@ -13,9 +13,27 @@ class TestR167AssetApiContract(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("/api/assets", doc)
         self.assertIn("--enable-assets", doc)
+        self.assertIn("--enable-asset-hashing", doc)
+        self.assertIn("optional", doc.lower())
         self.assertIn("/features", doc)
         self.assertIn("blake3", doc)
         self.assertIn("/view", doc)
+
+    def test_public_output_ref_docs_state_hashes_are_optional(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        public_docs = [
+            repo_root / "README.md",
+            repo_root / "docs" / "release" / "api_contract.md",
+            repo_root / "docs" / "troubleshooting.md",
+            repo_root / "docs" / "frontend_ux_walkthrough.md",
+        ]
+
+        for doc_path in public_docs:
+            with self.subTest(doc=str(doc_path.relative_to(repo_root))):
+                doc = doc_path.read_text(encoding="utf-8").lower()
+                self.assertIn("optional", doc)
+                self.assertIn("/view", doc)
+                self.assertIn("hash", doc)
 
     async def test_callback_delivery_preserves_asset_api_only_refs_without_view_fetch(
         self,

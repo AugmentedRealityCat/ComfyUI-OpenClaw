@@ -3,20 +3,21 @@
 ## 2026-07-08 reference anchor update
 
 - Current reference anchor is ComfyUI `51bf508a` (`v0.27.0-25-g51bf508a`, pyproject `0.27.0`).
-- SaveImage output sockets, 3D preview refs, typed asset dimensions, grouped asset downloads, and `hash` / `asset_hash` aliases do not change the no-go decision.
+- SaveImage output sockets, 3D preview refs, typed asset dimensions, grouped asset downloads, and optional `hash` / `asset_hash` aliases do not change the no-go decision.
+- ComfyUI asset hashing is host-side opt-in through `--enable-asset-hashing`, so normal filename-backed output refs must not require hash metadata.
 - OpenClaw continues to use `/history` + `/view`; asset-service-only refs stay explicit `asset_api_required` states.
 
 ## 2026-06-12 reconfirmation
 
 - Current output parsing is media-aware for ComfyUI result groups `images`, `video`, `audio`, `3d`, and bounded `text`.
-- File-like media refs still use `/view` when they provide `filename` or hash-backed preview metadata.
+- File-like media refs still use `/view` when they provide `filename`, or optional hash-backed preview metadata when the host provides it.
 - Text output previews are bounded and rendered as text, not HTML.
 - Asset-service-only identifiers remain explicit fallback states and still do not trigger automatic direct `/api/assets` fetches.
 
 ## 2026-05-31 reconfirmation
 
-- Current host reference evidence shows upstream asset responses may expose `hash` alongside `asset_hash`.
-- OpenClaw accepts `hash` as an alias for hash-backed previews, but still resolves those refs through `/view?filename=blake3:...`.
+- Current host reference evidence shows upstream asset responses may expose optional `hash` alongside `asset_hash`.
+- OpenClaw accepts `hash` as an alias for hash-backed previews when present, but still resolves those refs through `/view?filename=blake3:...`.
 - This does not change the no-go decision for automatic direct `/api/assets` runtime fetches.
 
 ## Scope
@@ -27,13 +28,14 @@
 
 - Current history/output-facing interop already accepts:
   - classic ComfyUI output refs (`filename`, `subfolder`, `type`)
-  - asset-hash-backed refs that still resolve through `/view?filename=blake3:...`
+  - optional asset-hash-backed refs that still resolve through `/view?filename=blake3:...` when host metadata is present
   - media-aware output groups (`images`, `video`, `audio`, `3d`, and bounded `text`)
 - Current ComfyUI `51bf508a` / `v0.27.0-25-g51bf508a` / pyproject `0.27.0` reference facts:
   - `/api/assets*` routes exist, but operational use is feature-gated behind `--enable-assets`
+  - content hashing is opt-in through `--enable-asset-hashing`, so normal filename-backed refs may omit `asset_hash` / `hash`
   - `/features` exposes the `assets` capability flag so hosts can report whether the asset system is enabled
   - frontend preview still resolves `blake3:...` asset hashes through `/view`, so hash-backed outputs do not require a direct `/api/assets` fetch
-  - asset responses may expose `hash` alongside `asset_hash`; OpenClaw treats both as hash-backed preview aliases
+  - asset responses may expose optional `hash` alongside `asset_hash`; OpenClaw treats both as hash-backed preview aliases when present
 - Current operator/runtime surfaces in scope:
   - sidebar `Jobs`
   - callback delivery payloads
@@ -49,7 +51,7 @@
 
 ## Rationale
 
-1. Current OpenClaw output surfaces still succeed on the existing bounded `/view` contract, including asset-hash-backed refs.
+1. Current OpenClaw output surfaces still succeed on the existing bounded `/view` contract, including optional asset-hash-backed refs when metadata exists.
 2. Adding `/api/assets` as a normal dependency would widen runtime coupling to upstream host behavior without a demonstrated operator need in current features.
 3. A silent fallback from `asset id only` to `/api/assets` would weaken boundary clarity and make host drift harder to reason about.
 
@@ -57,7 +59,7 @@
 
 - Preserve current supported refs exactly:
   - classic refs -> `/view?filename=...&type=...`
-  - asset-hash-backed refs -> `/view?filename=blake3:...`
+  - optional asset-hash-backed refs -> `/view?filename=blake3:...` when metadata exists
   - file-like media refs -> `/view` fallback/link surfaces when preview metadata is present
   - bounded text refs -> escaped text surfaces, not HTML
 - For refs that expose only asset-service identifiers and are not representable through `/view`:
