@@ -91,8 +91,10 @@ Deployment profiles and hardening references:
 
 <details>
 
-<summary><strong>Connector media safety, HDR fallbacks, and graph guards tightened</strong></summary>
+<summary><strong>Host compatibility, output previews, media safety, and graph guards refreshed</strong></summary>
 
+- Published host compatibility notes now pin the current ComfyUI, standalone frontend, and Desktop reference anchors while keeping Desktop embedded-frontend lag explicit.
+- Output previews keep filename-backed refs first-class, accept optional `asset_hash` / `hash` metadata when present, and leave asset-service-only identifiers as explicit fallback states.
 - LINE and WhatsApp connector media URLs now force dangerous active content such as SVG/HTML/JS/CSS/XML to download with no-sniff response headers while preserving safe image delivery.
 - Job Monitor now treats HDR `.exr` and `.hdr` image outputs as explicit source-preview fallback links instead of normal thumbnails, matching the current host expectation without bundling a HDR viewer.
 - Parameter Lab and graph-helper coverage now preserve non-numeric node IDs and promoted-widget source metadata, while structured color/box widget inputs stay out of missing-model diagnostics.
@@ -441,7 +443,7 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [API Overview](#api-overview) |
 | `PNG Info` | Inspects saved generation images through drag-and-drop, file picker, or scoped paste, parses A1111 infotext plus ComfyUI `prompt` / `workflow` metadata, shows extracted prompt and generation fields when recoverable, and keeps raw metadata visible for operator inspection. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
 | `Model Manager` | Searches model catalog/install records, queues managed downloads, monitors task lifecycle, and imports completed tasks into the managed install root with current ComfyUI folder-key normalization, including `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`, plus legacy type aliases. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
-| `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph. | [Operator UX Features](#operator-ux-features) |
+| `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph while preserving non-numeric host node IDs. | [Operator UX Features](#operator-ux-features) |
 
 ## Operator UX Features
 
@@ -476,7 +478,7 @@ Parameter Lab now supports experiment history and run replay:
 
 - `History` lists saved experiments from local state.
 - `Load` opens stored experiment details and run statuses.
-- `Replay` applies a selected run's parameter values back into the active workflow graph.
+- `Replay` applies a selected run's parameter values back into the active workflow graph without coercing string or non-numeric host node IDs.
 
 This makes iterative tuning and backtracking faster without manually retyping prior parameter sets.
 

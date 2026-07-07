@@ -149,6 +149,11 @@ Contracts for bounded parameter sweeps and experiment orchestration.
 }
 ```
 
+Contract notes:
+
+- `node_id` is a string-preserving host graph identifier. It may be numeric text such as `"10"` or a non-numeric host ID, and clients must not coerce it to a number when storing, comparing, or replaying experiment parameters.
+- Experiment parameter keys such as `"10.cfg"` are display/storage keys derived from the original `node_id` plus `widget_name`; they are not a separate numeric node contract.
+
 ### Experiment Result Schema (JSON)
 
 ```json
