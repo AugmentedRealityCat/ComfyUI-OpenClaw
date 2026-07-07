@@ -161,6 +161,55 @@ class TestPreflightBackend(AioHTTPTestCase):
             "detection",
         )
 
+    def test_structured_widget_metadata_does_not_create_missing_model_diagnostics(
+        self,
+    ):
+        services.preflight._CACHE.clear()
+
+        with (
+            patch.object(
+                services.preflight, "nodes", MagicMock(), create=True
+            ) as mock_nodes,
+            patch.object(
+                services.preflight, "folder_paths", MagicMock(), create=True
+            ) as mock_folder_paths,
+        ):
+            mock_nodes.NODE_CLASS_MAPPINGS = {
+                "ColorAndBoxNode": object,
+                "PromptMetadataNode": object,
+            }
+            mock_folder_paths.folder_names_and_paths = {}
+            mock_folder_paths.get_filename_list.return_value = []
+
+            workflow = {
+                "loader-alpha": {
+                    "class_type": "ColorAndBoxNode",
+                    "inputs": {
+                        "colors": ["#ff0000", "#00ff00"],
+                        "COLORS": ["#ff0000"],
+                        "bounding_boxes": [{"x": 1, "y": 2, "width": 3, "height": 4}],
+                        "BOUNDING_BOXES": {
+                            "boxes": [{"x": 0, "y": 0, "width": 8, "height": 8}]
+                        },
+                        "sourceExecutionId": "host-pack:source-loader",
+                    },
+                },
+                "metadata-node": {
+                    "class_type": "PromptMetadataNode",
+                    "inputs": {
+                        "sourceExecutionId": "host-pack:source-loader",
+                        "widgetName": "palette",
+                        "nodeId": "loader-alpha",
+                    },
+                },
+            }
+
+            report = services.preflight.run_preflight_check(workflow)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["summary"]["missing_models"], 0)
+        self.assertEqual(report["missing_models"], [])
+
     def test_inventory_model_types_track_current_comfyui_keys_and_exclude_custom_nodes(
         self,
     ):

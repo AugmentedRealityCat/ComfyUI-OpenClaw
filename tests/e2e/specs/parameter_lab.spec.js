@@ -141,6 +141,91 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
         });
     });
 
+    test('preserves non-numeric node ids through payload generation and replay apply', async ({ page }) => {
+        await page.evaluate(() => {
+            window.app.graph = {
+                _nodes: [
+                    {
+                        id: "loader-alpha",
+                        type: "CheckpointLoader",
+                        title: "String Loader",
+                        widgets: [
+                            {
+                                name: "ckpt_name",
+                                type: "combo",
+                                value: "base.ckpt",
+                                options: { values: ["base.ckpt", "xl.ckpt"] }
+                            }
+                        ]
+                    }
+                ],
+                getNodeById(id) {
+                    return this._nodes.find((node) => String(node.id) === String(id));
+                },
+                serialize() { return { "string_graph": true }; }
+            };
+            window.confirm = () => true;
+        });
+
+        await page.evaluate(async () => {
+            const mod = await import('/web/openclaw_api.js');
+            window.__labSweepPayload = null;
+
+            const originalFetch = mod.openclawApi.fetch.bind(mod.openclawApi);
+            mod.openclawApi.fetch = async (url, options = {}) => {
+                const normalizedPath = String(url || '').replace(/^\/moltbot/, '/openclaw');
+                if (normalizedPath.endsWith('/lab/sweep')) {
+                    const payload = JSON.parse(options?.body || '{}');
+                    window.__labSweepPayload = payload;
+                    return {
+                        ok: true,
+                        status: 200,
+                        data: {
+                            plan: {
+                                experiment_id: 'exp_string_ids',
+                                dimensions: payload.params,
+                                runs: [
+                                    { "loader-alpha.ckpt_name": "xl.ckpt" }
+                                ]
+                            }
+                        }
+                    };
+                }
+                return originalFetch(url, options);
+            };
+        });
+
+        await page.click('#lab-add-dim');
+        await expect(page.locator('.dim-node-select option[value="loader-alpha"]')).toHaveText('[loader-alpha] String Loader');
+        await page.selectOption('.dim-node-select', { value: 'loader-alpha' });
+        await page.selectOption('.dim-widget-select', { value: 'ckpt_name' });
+        await page.selectOption('.dim-candidate-select', { value: 'xl.ckpt' });
+
+        await page.click('#lab-generate');
+        await expect
+            .poll(() => page.evaluate(() => (window.__labSweepPayload ? 'ready' : 'pending')))
+            .toBe('ready');
+
+        const payload = await page.evaluate(() => window.__labSweepPayload);
+        expect(payload.params[0]).toEqual({
+            node_id: 'loader-alpha',
+            widget_name: 'ckpt_name',
+            values: ['xl.ckpt'],
+            strategy: 'grid'
+        });
+
+        await page.click('.replay-run');
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.app.graph
+                        .getNodeById('loader-alpha')
+                        .widgets.find((widget) => widget.name === 'ckpt_name').value
+                )
+            )
+            .toBe('xl.ckpt');
+    });
+
     test('supports nested subgraph nodes and promoted widget candidates', async ({ page }) => {
         await page.evaluate(() => {
             const nestedLoader = {

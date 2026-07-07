@@ -86,6 +86,77 @@ function createGraphFixture() {
     };
 }
 
+function createHostShapedGraphFixture() {
+    const nestedLoader = {
+        id: "source-loader",
+        type: "CheckpointLoaderSimple",
+        title: "Nested String Loader",
+        widgets: [
+            {
+                name: "ckpt_name",
+                type: "combo",
+                value: "base.ckpt",
+                options: { values: ["base.ckpt", "xl.ckpt"] },
+            },
+        ],
+    };
+    const subgraph = {
+        _nodes: [nestedLoader],
+        getNodeById(id) {
+            return this._nodes.find((node) => String(node.id) === String(id));
+        },
+    };
+    const host = {
+        id: "host-pack",
+        type: "SubgraphNode",
+        title: "String Workflow Pack",
+        widgets: [
+            {
+                name: "ckpt_name",
+                type: "combo",
+                value: "base.ckpt",
+                options: {},
+                sourceNodeId: "source-loader",
+                sourceExecutionId: "host-pack:source-loader",
+                sourceWidgetName: "ckpt_name",
+            },
+        ],
+        subgraph,
+    };
+    const stringNode = {
+        id: "loader-alpha",
+        type: "ColorAndBoxNode",
+        title: "String Node",
+        widgets: [
+            {
+                name: "palette",
+                type: "COLORS",
+                value: ["#ff0000", "#00ff00"],
+                options: {},
+            },
+            {
+                name: "regions",
+                type: "BOUNDING_BOXES",
+                value: [{ x: 1, y: 2, width: 3, height: 4 }],
+                options: {},
+            },
+            {
+                name: "ckpt_name",
+                type: "combo",
+                value: "base.ckpt",
+                options: { values: ["base.ckpt", "xl.ckpt"] },
+            },
+        ],
+    };
+
+    return {
+        _nodes: [host, stringNode],
+        getNodeById(id) {
+            return this._nodes.find((node) => String(node.id) === String(id));
+        },
+    };
+}
+
 describe("openclaw_graph_host", () => {
     it("builds catalog entries for nested subgraph nodes", () => {
         const graph = createGraphFixture();
@@ -119,5 +190,42 @@ describe("openclaw_graph_host", () => {
         expect(compareTarget?.widgetName).toBe("ckpt_name");
         expect(resolved?.nodeEntry.id).toBe("50:7");
         expect(resolved?.widget.name).toBe("ckpt_name");
+    });
+
+    it("preserves host-shaped sourceExecutionId metadata for promoted widgets", () => {
+        const graph = createHostShapedGraphFixture();
+        const widgetCatalog = getGraphWidgetCatalog(graph, "host-pack");
+        const promotedWidget = widgetCatalog.find((entry) => entry.name === "ckpt_name");
+        const resolved = resolveGraphWidget(graph, "host-pack", "ckpt_name");
+
+        expect(promotedWidget).toMatchObject({
+            isPromoted: true,
+            sourceNodeId: "source-loader",
+            sourceExecutionId: "host-pack:source-loader",
+            sourceWidgetName: "ckpt_name",
+            resolvedNodeId: "host-pack:source-loader",
+            resolvedWidgetName: "ckpt_name",
+        });
+        expect(resolved?.nodeEntry.id).toBe("host-pack:source-loader");
+        expect(getGraphWidgetValueCandidates(graph, "host-pack", "ckpt_name")).toEqual([
+            "base.ckpt",
+            "xl.ckpt",
+        ]);
+    });
+
+    it("keeps non-numeric node ids stable and catalogs new structured widget types", () => {
+        const graph = createHostShapedGraphFixture();
+        const catalog = getGraphNodeCatalog(graph);
+        const widgetCatalog = getGraphWidgetCatalog(graph, "loader-alpha");
+        const compareTarget = findComparableWidget(graph, "loader-alpha");
+
+        expect(catalog.map((entry) => entry.id)).toContain("loader-alpha");
+        expect(widgetCatalog.map((entry) => [entry.name, entry.type])).toEqual([
+            ["palette", "COLORS"],
+            ["regions", "BOUNDING_BOXES"],
+            ["ckpt_name", "combo"],
+        ]);
+        expect(resolveGraphWidget(graph, "loader-alpha", "palette")?.nodeEntry.id).toBe("loader-alpha");
+        expect(compareTarget?.nodeId).toBe("loader-alpha");
     });
 });

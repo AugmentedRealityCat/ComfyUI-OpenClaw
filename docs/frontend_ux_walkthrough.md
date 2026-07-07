@@ -24,6 +24,7 @@ Refactor note:
 - New tab markup should use canonical `openclaw-*` classes; legacy `moltbot-*` aliases are generated centrally at runtime instead of being duplicated in each template.
 - New host sidebar registration changes should stay in `web/openclaw_sidebar_registration.js` rather than duplicating ComfyUI frontend API detection inside the extension entrypoint.
 - Host-sensitive behaviors should consume the shared host-surface helper rather than inferring desktop vs standalone frontend from ad-hoc globals.
+- Graph/widget flows should preserve host-shaped promoted-widget source metadata and non-numeric node IDs, including Parameter Lab replay/apply paths.
 - Output preview flows should consume the shared asset-ref normalizer rather than assembling `/view` URLs independently in each tab, treating non-image or HDR media as broken images, or silently widening runtime behavior to direct `/api/assets` fetches.
 - Explorer/preflight consumers should treat inventory diagnostics as snapshot-first and surface `snapshot_ts`, `scan_state`, `stale`, and `last_error` instead of blocking the UI on full rescans.
 - Explorer/preflight rendering should keep actionable missing-node/model failures separate from suppressed inactive-branch findings returned by the backend.
@@ -47,7 +48,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 - OpenClaw treats standalone `ComfyUI_frontend` and `desktop` as distinct frontend host surfaces.
 - The sidebar stamps its resolved host surface and refreshed host-reference metadata at mount time so desktop bundle drift is explicit in diagnostics and regression tests.
 - The standalone Remote Admin Console now stamps the same host-surface metadata on its document root, including desktop `0.9.4`, bundled core `0.22.3`, embedded frontend `1.43.18`, and lagging parity relative to standalone frontend `1.47.6`.
-- Graph/widget compatibility code should route through shared host helpers to keep nested-subgraph and promoted-widget behavior aligned with current upstream host semantics.
+- Graph/widget compatibility code should route through shared host helpers to keep nested-subgraph and promoted-widget behavior aligned with current upstream host semantics, including preserving source metadata and string-shaped node IDs.
 
 ## Standalone Remote Admin Console
 

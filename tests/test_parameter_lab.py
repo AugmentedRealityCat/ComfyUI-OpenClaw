@@ -56,6 +56,22 @@ class TestSweepPlanner(unittest.TestCase):
         self.assertEqual(plan1.runs, plan2.runs)
         self.assertEqual(plan1.runs[0], {"1.steps": 10})
 
+    def test_generate_preserves_non_numeric_node_id_keys(self):
+        planner = SweepPlanner()
+        plan = planner.generate(
+            workflow='{"nodes":[]}',
+            params=[
+                {
+                    "node_id": "loader-alpha",
+                    "widget_name": "ckpt_name",
+                    "values": ["xl.ckpt"],
+                },
+            ],
+        )
+
+        self.assertEqual(plan.dimensions[0].node_id, "loader-alpha")
+        self.assertEqual(plan.runs, [{"loader-alpha.ckpt_name": "xl.ckpt"}])
+
 
 class TestComparePlanner(unittest.TestCase):
     # ... existing tests ...

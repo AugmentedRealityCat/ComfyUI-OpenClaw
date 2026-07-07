@@ -268,6 +268,7 @@ export function getGraphWidgetCatalog(graph, nodeId) {
             options: widget?.options,
             isPromoted: isPromotedWidgetView(widget),
             sourceNodeId: widget?.sourceNodeId,
+            sourceExecutionId: widget?.sourceExecutionId,
             sourceWidgetName: widget?.sourceWidgetName,
             resolvedNodeId: resolved?.nodeEntry?.id || entry.id,
             resolvedWidgetName: resolved?.widget?.name || widgetName,
@@ -320,6 +321,7 @@ export function findComparableWidget(graph, nodeRefOrId) {
             widget: resolved.widget,
             hostWidgetName: widgetName,
             nodeId: resolved.nodeEntry.id,
+            sourceExecutionId: widget?.sourceExecutionId,
             widgetName: resolved.widget.name || widgetName,
         };
     }

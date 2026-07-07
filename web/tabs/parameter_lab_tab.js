@@ -7,6 +7,7 @@ import {
     getGraphNodeCatalog,
     getGraphWidgetCatalog,
     getGraphWidgetValueCandidates,
+    resolveGraphWidget,
 } from "../openclaw_graph_host.js";
 import { openclawUI } from "../openclaw_ui.js";
 
@@ -747,13 +748,23 @@ export const ParameterLabTab = {
     applyOverrides(run) {
         Object.entries(run).forEach(([key, value]) => {
             if (key === "prompt_id" || key === "status") return;
-            const [nodeId, widgetName] = key.split(".");
-            const node = app.graph.getNodeById(parseInt(nodeId));
-            if (node) {
-                const widget = node.widgets.find(w => w.name === widgetName);
-                if (widget) {
-                    widget.value = value;
-                }
+            const separatorIndex = key.indexOf(".");
+            if (separatorIndex <= 0) return;
+            const nodeId = key.slice(0, separatorIndex);
+            const widgetName = key.slice(separatorIndex + 1);
+            const resolved = resolveGraphWidget(app.graph, nodeId, widgetName);
+            const fallbackNode = app.graph.getNodeById?.(this._coerceSelectedNodeId(nodeId));
+            const node = resolved?.node || fallbackNode;
+            if (!node) {
+                return;
+            }
+            const widget =
+                resolved?.widget ||
+                (Array.isArray(node.widgets)
+                    ? node.widgets.find((entry) => entry.name === widgetName)
+                    : null);
+            if (widget) {
+                widget.value = value;
             }
         });
     }
