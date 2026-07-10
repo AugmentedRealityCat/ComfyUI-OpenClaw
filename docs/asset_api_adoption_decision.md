@@ -1,10 +1,11 @@
 # ComfyUI Asset API Adoption Decision (2026-04-16)
 
-## 2026-07-08 reference anchor update
+## 2026-07-10 reference anchor update
 
-- Current reference anchor is ComfyUI `51bf508a` (`v0.27.0-25-g51bf508a`, pyproject `0.27.0`).
+- Current reference anchor is ComfyUI `1377a2f7` (`v0.27.0-47-g1377a2f7`, pyproject `0.27.0`).
 - SaveImage output sockets, 3D preview refs, typed asset dimensions, grouped asset downloads, and optional `hash` / `asset_hash` aliases do not change the no-go decision.
 - ComfyUI asset hashing is host-side opt-in through `--enable-asset-hashing`, so normal filename-backed output refs must not require hash metadata.
+- Current host asset metadata may expose `loader_path`; model uploads require `model_type:<folder_name>` tags, and `/features.supports_model_type_tags` advertises that contract. OpenClaw does not upload through or directly consume `/api/assets`, so these facts do not change the no-go decision.
 - OpenClaw continues to use `/history` + `/view`; asset-service-only refs stay explicit `asset_api_required` states.
 
 ## 2026-06-12 reconfirmation
@@ -32,12 +33,13 @@
   - optional asset-hash-backed refs that still resolve through `/view?filename=blake3:...` when host metadata is present
   - media-aware output groups (`images`, `video`, `audio`, `3d`, and bounded `text`)
   - HDR `.exr` / `.hdr` image refs as explicit `/view` source-preview fallback links, not normal thumbnails
-- Current ComfyUI `51bf508a` / `v0.27.0-25-g51bf508a` / pyproject `0.27.0` reference facts:
+- Current ComfyUI `1377a2f7` / `v0.27.0-47-g1377a2f7` / pyproject `0.27.0` reference facts:
   - `/api/assets*` routes exist, but operational use is feature-gated behind `--enable-assets`
   - content hashing is opt-in through `--enable-asset-hashing`, so normal filename-backed refs may omit `asset_hash` / `hash`
   - `/features` exposes the `assets` capability flag so hosts can report whether the asset system is enabled
   - frontend preview still resolves `blake3:...` asset hashes through `/view`, so hash-backed outputs do not require a direct `/api/assets` fetch
   - asset responses may expose optional `hash` alongside `asset_hash`; OpenClaw treats both as hash-backed preview aliases when present
+  - asset metadata may expose `loader_path`; model uploads require `model_type:<folder_name>` tags, advertised by `/features.supports_model_type_tags`
 - Current operator/runtime surfaces in scope:
   - sidebar `Jobs`
   - callback delivery payloads

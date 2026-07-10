@@ -7,6 +7,16 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Host compatibility reference anchors refreshed</strong></summary>
+
+- Refreshed the active compatibility baseline to ComfyUI `1377a2f7` (`v0.27.0-47-g1377a2f7`, pyproject `0.27.0`) and standalone frontend `1.48.1` (`ceb5ae1eba`, `v1.48.1-1-gceb5ae1eba`).
+- Kept Desktop pinned separately at `0.9.4` with core `0.22.3` and embedded frontend `1.43.18`, explicitly lagging the standalone frontend reference.
+- Documented current host asset `loader_path` and namespaced model-tag schema without adopting direct `/api/assets` runtime access or changing OpenClaw's Node.js 18+ test policy.
+
+</details>
+
+<details>
+
 <summary><strong>Host compatibility, output previews, media safety, and graph guards refreshed</strong></summary>
 
 - Published host compatibility notes now pin the current ComfyUI, standalone frontend, and Desktop reference anchors while keeping Desktop embedded-frontend lag explicit.
