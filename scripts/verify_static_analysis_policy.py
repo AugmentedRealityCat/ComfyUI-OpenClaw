@@ -66,7 +66,9 @@ def _repo_relative_path(path_value: Any, repo_root: Path) -> str:
     try:
         relative = path.resolve().relative_to(repo_root.resolve())
     except ValueError as exc:
-        raise ValueError(f"diagnostic path is outside repository: {path_value}") from exc
+        raise ValueError(
+            f"diagnostic path is outside repository: {path_value}"
+        ) from exc
     return relative.as_posix()
 
 
@@ -323,9 +325,7 @@ def _run_command(
 
 
 def _parse_tool_version(tool_name: str, output: str) -> str:
-    match = re.search(
-        rf"\b{re.escape(tool_name)}\s+([0-9]+(?:\.[0-9]+)+)", output
-    )
+    match = re.search(rf"\b{re.escape(tool_name)}\s+([0-9]+(?:\.[0-9]+)+)", output)
     if not match:
         raise ToolExecutionError(f"{tool_name} version output was not recognized")
     return match.group(1)
@@ -546,9 +546,7 @@ def main(argv: list[str] | None = None) -> int:
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
         requirement_lines = requirements_path.read_text(encoding="utf-8").splitlines()
         structural_failures = validate_policy(repo_root, policy)
-        structural_failures.extend(
-            validate_requirement_pins(policy, requirement_lines)
-        )
+        structural_failures.extend(validate_requirement_pins(policy, requirement_lines))
         if structural_failures:
             for failure in structural_failures:
                 print(f"STATIC-ANALYSIS-FAIL: {failure}")
@@ -589,7 +587,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"STATIC-ANALYSIS-FAIL: invalid policy or tool output ({type(exc).__name__})")
+        print(
+            f"STATIC-ANALYSIS-FAIL: invalid policy or tool output ({type(exc).__name__})"
+        )
         return 1
     except ToolExecutionError as exc:
         print(f"STATIC-ANALYSIS-FAIL: {exc}")

@@ -46,7 +46,9 @@ class TestStaticAnalysisPolicy(unittest.TestCase):
         (root / "pkg" / "nested").mkdir(parents=True)
         (root / "pkg" / "owned.py").write_text("import os\n", encoding="utf-8")
         (root / "pkg" / "clean.py").write_text("VALUE: int = 1\n", encoding="utf-8")
-        (root / "pkg" / "generated.py").write_text("generated = True\n", encoding="utf-8")
+        (root / "pkg" / "generated.py").write_text(
+            "generated = True\n", encoding="utf-8"
+        )
         (root / "pkg" / "nested" / "child.py").write_text(
             "CHILD = True\n", encoding="utf-8"
         )
@@ -373,9 +375,9 @@ class TestStaticAnalysisPolicy(unittest.TestCase):
                     name = command[2]
                     return SimpleNamespace(
                         returncode=0,
-                        stdout=f"{name} 0.15.20\n"
-                        if name == "ruff"
-                        else "mypy 2.2.0\n",
+                        stdout=(
+                            f"{name} 0.15.20\n" if name == "ruff" else "mypy 2.2.0\n"
+                        ),
                         stderr="",
                     )
                 return SimpleNamespace(
@@ -414,9 +416,7 @@ class TestStaticAnalysisPolicy(unittest.TestCase):
                     return SimpleNamespace(
                         returncode=0,
                         stdout=(
-                            "ruff 0.15.19\n"
-                            if command[2] == "ruff"
-                            else "mypy 2.2.0\n"
+                            "ruff 0.15.19\n" if command[2] == "ruff" else "mypy 2.2.0\n"
                         ),
                         stderr="",
                     )
@@ -438,9 +438,7 @@ class TestStaticAnalysisPolicy(unittest.TestCase):
             "ruff requirement drift: expected ruff==0.15.20, found ruff>=0.15.20",
             failures,
         )
-        self.assertIn(
-            "ruff version drift: expected 0.15.20, found 0.15.19", failures
-        )
+        self.assertIn("ruff version drift: expected 0.15.20, found 0.15.19", failures)
 
 
 class TestRepositoryStaticAnalysisPolicy(unittest.TestCase):
@@ -452,7 +450,9 @@ class TestRepositoryStaticAnalysisPolicy(unittest.TestCase):
 
     def test_repository_policy_and_quality_pins_are_valid(self):
         policy = json.loads(self.policy_path.read_text(encoding="utf-8"))
-        requirement_lines = self.requirements_path.read_text(encoding="utf-8").splitlines()
+        requirement_lines = self.requirements_path.read_text(
+            encoding="utf-8"
+        ).splitlines()
 
         self.assertEqual(policy_module.validate_policy(self.repo_root, policy), [])
         self.assertEqual(
@@ -471,16 +471,23 @@ class TestRepositoryStaticAnalysisPolicy(unittest.TestCase):
                 "scripts",
             ],
         )
-        self.assertGreater(len(policy_module.discover_owned_python_files(self.repo_root, policy)), 200)
+        self.assertGreater(
+            len(policy_module.discover_owned_python_files(self.repo_root, policy)), 200
+        )
         self.assertGreaterEqual(len(policy["strict_paths"]), 1)
 
     def test_repository_execution_surfaces_use_shared_verifier(self):
         expected = "scripts/verify_static_analysis_policy.py"
         surfaces = {
             ".pre-commit-config.yaml": self.repo_root / ".pre-commit-config.yaml",
-            "windows full gate": self.repo_root / "scripts" / "run_full_tests_windows.ps1",
+            "windows full gate": self.repo_root
+            / "scripts"
+            / "run_full_tests_windows.ps1",
             "linux full gate": self.repo_root / "scripts" / "run_full_tests_linux.sh",
-            "pre-commit CI": self.repo_root / ".github" / "workflows" / "pre-commit.yml",
+            "pre-commit CI": self.repo_root
+            / ".github"
+            / "workflows"
+            / "pre-commit.yml",
             "unit CI": self.repo_root / ".github" / "workflows" / "ci.yml",
         }
         for label, path in surfaces.items():
