@@ -25,9 +25,13 @@ Operators should use this to understand the risks of deployment.
 * **Who**: Chat users (Telegram/Discord/LINE).
 * **Access**:
   * **User**: `submit_job` (via Allowlisted templates), `query_status`.
-  * **Admin (Chat)**: `approve_request`, `cancel_job`, `trace`.
+  * **Admin (Chat)**: `approve_request`, `cancel_job`, `trace`, and privacy-minimized
+    `list_jobs` summaries.
 * **Mechanism**: Chat platform auth + OpenClaw User Allowlist (or `require_approval` policy).
-* **Risk**: Spam/DoS (mitigated by Budgets + Rate Limits), or Prompt Injection (mitigated by Template Constraints).
+* **Risk**: Spam/DoS (mitigated by Budgets + Rate Limits), Prompt Injection (mitigated by
+  Template Constraints), or job metadata disclosure (mitigated by Admin-only authorization,
+  allowlisted bounded fields, content-free errors, and keeping raw jobs payloads out of the
+  chat LLM).
 
 ---
 

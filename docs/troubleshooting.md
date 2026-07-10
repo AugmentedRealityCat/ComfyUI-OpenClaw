@@ -63,6 +63,28 @@ Explorer / inventory note:
 - A response showing `scan_state=refreshing` or `stale=true` does not necessarily mean the inventory path is broken; it can mean the cached snapshot was returned quickly while a deeper model scan continues in the background.
 - Treat `last_error` as the primary signal that the background scan actually failed.
 
+## Jobs list or connector `/jobs` reports authorization or backend errors
+
+`GET /openclaw/jobs` is an Admin-only bounded read model. For direct API/browser calls,
+send the configured Admin token and use only the documented `status`, `workflow_id`,
+`sort_by`, `sort_order`, `limit`, and `offset` query fields.
+
+Interpret results as follows:
+
+- HTTP 200 with `jobs: []` is an authoritative empty snapshot.
+- HTTP 401/403 means Admin authentication or tenant authorization failed; verify
+  `OPENCLAW_ADMIN_TOKEN`, and for connector commands also verify
+  `OPENCLAW_CONNECTOR_ADMIN_TOKEN` plus the sender's Admin allowlist/class policy.
+- HTTP 501 `jobs_host_contract_unsupported` means the active ComfyUI host does not expose
+  the required queue/history helper contract.
+- HTTP 503 `jobs_backend_unavailable` means the host snapshot was unavailable or malformed;
+  it must not be treated as an empty queue.
+
+The connector `/jobs` command returns fixed, content-free failures. It can show a bounded
+coarse queue-count fallback only for the explicit 501/503 conditions above; authorization,
+unknown-version, malformed, or oversized responses do not fall back and never echo the raw
+upstream payload.
+
 ## External tool execution is disabled or fails with sandbox diagnostics
 
 External tools are disabled by default and require an admin boundary plus an explicit feature flag.

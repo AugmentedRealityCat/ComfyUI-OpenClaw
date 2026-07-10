@@ -91,8 +91,18 @@ Deployment profiles and hardening references:
 
 <details>
 
-<summary><strong>Host compatibility, output previews, media safety, and graph guards refreshed</strong></summary>
+<summary><strong>Secure jobs visibility, host compatibility, output previews, and graph guards refreshed</strong></summary>
 
+- `GET /openclaw/jobs` now provides an Admin-only, versioned jobs view with bounded
+  status/workflow filtering, sorting, pagination, and privacy-minimized summaries across
+  pending, in-progress, completed, failed, and cancelled work.
+- Jobs listing distinguishes an authoritative empty snapshot from unsupported or
+  unavailable host contracts and never returns raw prompts, workflows, execution errors,
+  tracebacks, current inputs/outputs, tenant/client/trace identifiers, or reasoning text.
+- Authorized connector operators can use `/jobs` (plus `jobs` or `queue`) for a bounded
+  authoritative summary. The connector validates the response contract, displays only
+  aggregate counts and short job IDs, and uses a coarse queue-count fallback only for
+  explicit host-contract/backend unavailability.
 - Published host compatibility notes now pin the current ComfyUI, standalone frontend, and Desktop reference anchors while keeping Desktop embedded-frontend lag explicit.
 - Output previews keep filename-backed refs first-class, accept optional `asset_hash` / `hash` metadata when present, and leave asset-service-only identifiers as explicit fallback states.
 - LINE and WhatsApp connector media URLs now force dangerous active content such as SVG/HTML/JS/CSS/XML to download with no-sniff response headers while preserving safe image delivery.
@@ -516,6 +526,8 @@ Base path notes:
 Main API families:
 
 - Observability: health, capabilities, logs, traces, event feeds
+- Jobs visibility: Admin-only, bounded and privacy-minimized list/filter/sort/pagination
+  over the in-process ComfyUI queue and history snapshot
 - Admin diagnostics: preflight inventory snapshot/status, doctor-facing readiness views
 - Config + LLM: effective config, provider tests, model lists, assist planner/refiner
 - Connector diagnostics: installation state, resolution, callback/tenant binding evidence, audit views, extraction seam metadata, and static service-env SecretRef propagation policy
@@ -536,6 +548,10 @@ Primary references:
 Key operational notes:
 
 - Observability remains token-gated for remote access and redacts provider reasoning-like content plus marked internal maintenance/helper content by default.
+- `GET /openclaw/jobs` is Admin-only and returns contract version 1 with bounded job
+  summaries and pagination. Treat HTTP 200 with `jobs: []` as an authoritative empty
+  snapshot, HTTP 501 as an unsupported host contract, and HTTP 503 as backend
+  unavailability; neither failure is an empty success.
 - Event/model-download polling and preflight inventory are snapshot/cursor-driven contracts; clients should consume `snapshot_ts`, `scan_state`, `stale`, and cursor metadata instead of assuming full-refresh polling.
 - Model Manager and preflight consumers should use current ComfyUI folder keys for model types where possible, including `text_encoders`, `diffusion_models`, `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`; compatibility aliases such as `clip`, `unet`, `ckpt`, and plural legacy names are normalized before lookup/import.
 - Output/history-facing consumers should keep using the bounded `/history` + `/view` contract; current previewable output groups include `images`, `video`, `audio`, `3d`, and bounded `text`, while optional hash-backed refs are used only when host metadata is present and refs that only upstream asset services can resolve remain explicit `asset_api_required` compatibility states.
@@ -745,7 +761,9 @@ OpenClaw includes a standalone **Connector** process that allows you to control 
 
 The connector currently remains an **optional attached subsystem inside this repo/package boundary**. Current builds expose extraction diagnostics for maintainers, but do **not** treat a standalone connector package or separate-repo distribution as a supported release shape.
 
-- **Status & Queue**: Check job progress remotely.
+- **Status & Queue**: Authorized operators can use `/jobs` for a bounded authoritative
+  jobs summary; public `/status` remains a coarse health/queue view and does not receive
+  the Admin-only jobs payload.
 - **Run Jobs**: Submit templates via chat commands.
 - **Targeted cancellation**: `/stop`, `/cancel`, and `/interrupt` without job IDs send an explicit global interrupt; supplying one or more job IDs requests targeted ComfyUI job cancellation.
 - **Approvals**: Approve/Reject paused workflows from your phone.

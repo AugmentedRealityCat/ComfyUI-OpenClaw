@@ -289,6 +289,28 @@ OPENCLAW_COMMAND_ALLOW_FROM_RUN=alice_id,ops_bot_id
 
 If a class-level `OPENCLAW_COMMAND_ALLOW_FROM_*` list is set and non-empty, only listed IDs can run that class.
 
+### Authoritative jobs summary
+
+`/jobs` and its `jobs` / `queue` aliases are Admin-class commands. They require both an
+authorized connector admin user and a configured `OPENCLAW_CONNECTOR_ADMIN_TOKEN` before
+the connector calls `GET /openclaw/jobs`.
+
+The connector validates jobs contract version 1 before rendering any reply:
+
+- output contains aggregate snapshot/page counts plus at most five job IDs and statuses;
+- displayed job IDs are capped at 24 characters and the complete reply is capped at 1,000
+  characters;
+- raw job records, prompts, workflows, outputs, errors, tracebacks, tenant identifiers,
+  and the upstream payload are never sent to the chat LLM or copied into error messages;
+- HTTP 401/403 returns a fixed authorization message without fallback;
+- only explicit HTTP 501 `jobs_host_contract_unsupported` or HTTP 503
+  `jobs_backend_unavailable` responses may fall back to a bounded coarse queue count;
+- malformed, unknown-version, oversized, or inconsistent success payloads fail to a fixed
+  content-free message.
+
+Public `/status` remains separate: it can summarize health and the coarse ComfyUI queue,
+but it does not fetch or forward the Admin-only jobs snapshot.
+
 ### 3. Usage
 
 #### Running the Connector

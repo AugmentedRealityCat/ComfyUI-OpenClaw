@@ -7,6 +7,25 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Secure jobs visibility and connector summaries completed</strong></summary>
+
+- Replaced the placeholder jobs listing with an Admin-only, versioned in-process read
+  model over current ComfyUI queue/history state, including five lifecycle states and
+  bounded status/workflow filters, sorting, pagination, and source/scan diagnostics.
+- Reduced every listed job to an allowlisted summary and excluded raw prompts, workflows,
+  execution errors, tracebacks, current inputs/outputs, tenant/client/trace identifiers,
+  reasoning, and internal content from successful responses and audit details.
+- Preserved authoritative empty snapshots while distinguishing unsupported host contracts
+  (HTTP 501) from unavailable or malformed snapshots (HTTP 503), so failures cannot look
+  like an empty queue.
+- Added an Admin-class connector `/jobs` summary that validates contract version 1,
+  renders bounded aggregate counts and short IDs, keeps the raw payload out of the chat
+  LLM, and permits only a coarse queue-count fallback for explicit 501/503 conditions.
+
+</details>
+
+<details>
+
 <summary><strong>Host compatibility reference anchors refreshed</strong></summary>
 
 - Refreshed the active compatibility baseline to ComfyUI `1377a2f7` (`v0.27.0-47-g1377a2f7`, pyproject `0.27.0`) and standalone frontend `1.48.1` (`ceb5ae1eba`, `v1.48.1-1-gceb5ae1eba`).
