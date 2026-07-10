@@ -5,6 +5,7 @@ Dispatches parsed commands to handlers with AST argument parsing.
 
 import logging
 import shlex
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
 from .config import CommandClass, ConnectorConfig
@@ -16,6 +17,7 @@ if False:  # Type hinting only
     from .results_poller import ResultsPoller
 
 from .command_firewall import CommandFirewall
+from .jobs_summary import JobsContractError, format_jobs_summary, format_queue_fallback
 from .llm_client import LLMClient
 from .prompts import CHAT_STATUS_PROMPT, CHAT_SYSTEM_PROMPT
 from .rate_limiter import RateLimiter
@@ -141,7 +143,7 @@ class CommandRouter:
             # Phase 3 Introspection
             ("/history", "history"): (self._handle_history, CommandClass.PUBLIC),
             ("/trace", "trace"): (self._handle_trace, CommandClass.ADMIN),  # Admin only
-            ("/jobs", "jobs", "queue"): (self._handle_jobs, CommandClass.PUBLIC),
+            ("/jobs", "jobs", "queue"): (self._handle_jobs, CommandClass.ADMIN),
             # F30: Chat Assistant
             ("/chat", "chat"): (self._handle_chat, CommandClass.PUBLIC),
         }
@@ -736,8 +738,8 @@ class CommandRouter:
                 "/run <template> [prompt] [k=v] - Run a generation (trusted users auto-exec; others require approval)\n"
                 "/stop [job_id ...] - Cancel jobs by id; no args sends Global Interrupt (Admin)\n"
                 "/history <id> - Job details\n"
-                "/jobs - Queue summary\n"
                 "Admin Only:\n"
+                "/jobs - Authoritative jobs summary\n"
                 "/approvals - List pending approvals\n"
                 "/approve <id>, /reject <id>\n"
                 "/schedules, /schedule run <id>\n"
@@ -783,21 +785,44 @@ class CommandRouter:
     async def _handle_jobs(
         self, req: CommandRequest, args: List[str]
     ) -> CommandResponse:
-        # Try native /openclaw/jobs first
+        if err := self._require_admin_token_configured():
+            return err
+
         res = await self.client.get_jobs()
-        if res.get("ok"):
-            # Format nice summary
+        if not isinstance(res, Mapping):
             return CommandResponse(
-                text=f"Default Jobs View: {sanitize_operator_payload(res.get('data'))}"
+                text="[Jobs] Could not fetch the authoritative jobs snapshot."
             )
+        if res.get("ok") is True:
+            try:
+                return CommandResponse(text=format_jobs_summary(res.get("data")))
+            except JobsContractError:
+                return CommandResponse(
+                    text="[Jobs] Malformed or unsupported jobs response."
+                )
 
-        # Fallback: Queue
-        q = await self.client.get_prompt_queue()
-        if q.get("ok"):
-            rem = q.get("data", {}).get("exec_info", {}).get("queue_remaining", "?")
-            return CommandResponse(text=f"[Fallback] Queue Remaining: {rem}")
-
-        return CommandResponse(text="[Error] Could not fetch jobs or queue.")
+        status = res.get("status")
+        error = res.get("error")
+        access_denied = (
+            isinstance(status, int)
+            and not isinstance(status, bool)
+            and status in {401, 403}
+        )
+        if access_denied:
+            return CommandResponse(
+                text="[Jobs] Access denied. Check connector Admin authorization and token posture."
+            )
+        fallback_allowed = isinstance(error, str) and (
+            (status == 501 and error == "jobs_host_contract_unsupported")
+            or (status == 503 and error == "jobs_backend_unavailable")
+        )
+        if fallback_allowed:
+            return CommandResponse(
+                text=format_queue_fallback(await self.client.get_prompt_queue())
+            )
+        return CommandResponse(
+            text="[Jobs] Could not fetch the authoritative jobs snapshot."
+        )
 
     # -------------------------------------------------------------------------
     # F30: Chat LLM Assistant
@@ -1020,12 +1045,11 @@ Keep it minimal."""
         """Summarize system status using LLM."""
         # Fetch status data
         health = await self.client.get_health()
-        jobs = await self.client.get_jobs()
         queue = await self.client.get_prompt_queue()
 
         status_data = {
             "health": health.get("data", {}) if health.get("ok") else "unavailable",
-            "jobs": jobs.get("data", {}) if jobs.get("ok") else "unavailable",
+            "jobs": "admin-only; use /jobs as an authorized operator",
             "queue": queue.get("data", {}) if queue.get("ok") else "unavailable",
         }
 

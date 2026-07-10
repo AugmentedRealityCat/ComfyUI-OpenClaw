@@ -54,10 +54,27 @@ class TestCommandRouterPhase3(unittest.TestCase):
         self.client.get_history.assert_called_with("p1")
 
     def test_jobs(self):
-        # Public
-        req = self._req("/jobs", sender="123")
+        # Jobs expose cross-job metadata and are connector-admin only.
+        self.client.get_jobs.return_value = {
+            "ok": True,
+            "data": {
+                "ok": True,
+                "contract_version": 1,
+                "jobs": [],
+                "pagination": {
+                    "offset": 0,
+                    "limit": 50,
+                    "total": 0,
+                    "has_more": False,
+                    "warnings": [],
+                },
+                "source": {},
+                "scan": {},
+            },
+        }
+        req = self._req("/jobs", sender="999")
         resp = asyncio.run(self.router.handle(req))
-        self.assertIn("5", resp.text)
+        self.assertIn("No jobs in the authoritative snapshot", resp.text)
         self.client.get_jobs.assert_called_once()
 
     def test_trace_admin(self):

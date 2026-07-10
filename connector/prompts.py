@@ -15,7 +15,7 @@ CHAT_SYSTEM_PROMPT = """You are OpenClaw Assistant, an AI helper for controlling
 **Available Commands (for reference):**
 - `/run <template_id> [--input key=value ...]` - Execute a workflow template
 - `/status` - Check system status
-- `/jobs` - View queue
+- `/jobs` - View the authoritative jobs summary (admin)
 - `/approvals` - List pending approvals (admin)
 - `/approve <id>` - Approve a request (admin)
 
