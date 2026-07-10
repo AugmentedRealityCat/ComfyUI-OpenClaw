@@ -331,11 +331,11 @@ async def config_get_handler(request: web.Request) -> web.Response:
             status=403,
         )
     except Exception as e:
-        logger.exception("Error getting config")
+        logger.error("Error getting config (error_type=%s)", type(e).__name__)
         return web.json_response(
             {
                 "ok": False,
-                "error": str(e),
+                "error": "config_read_failed",
             },
             status=500,
         )
@@ -865,7 +865,7 @@ async def llm_test_handler(request: web.Request) -> web.Response:
             ):
                 try:
                     timeout_sec = int(timeout_val)
-                except Exception:
+                except (TypeError, ValueError, OverflowError):
                     return web.json_response(
                         {"ok": False, "error": "timeout_sec must be an integer"},
                         status=400,
@@ -879,7 +879,7 @@ async def llm_test_handler(request: web.Request) -> web.Response:
             ):
                 try:
                     max_retries = int(retries_val)
-                except Exception:
+                except (TypeError, ValueError, OverflowError):
                     return web.json_response(
                         {"ok": False, "error": "max_retries must be an integer"},
                         status=400,
@@ -963,20 +963,20 @@ async def llm_test_handler(request: web.Request) -> web.Response:
             status=403,
         )
     except Exception as e:
-        logger.exception("LLM test failed")
+        logger.error("LLM test failed (error_type=%s)", type(e).__name__)
         emit_audit_event(
             action="llm.test_connection",
             target="llm",
             outcome="error",
             token_info=token_info,
             status_code=500,
-            details={"error": str(e)},
+            details={"error": "llm_test_failed"},
             request=request,
         )
         return web.json_response(
             {
                 "ok": False,
-                "error": str(e),
+                "error": "llm_test_failed",
             },
             status=500,
         )
@@ -1127,19 +1127,10 @@ async def llm_chat_handler(request: web.Request) -> web.Response:
             payload["retry_after"] = e.retry_after
         return web.json_response(payload, status=e.status_code)
     except Exception as e:
-        # S29: Redact exception message to prevent accidental prompt content leakage.
-        # Downgraded from error → warning (non-actionable for operators when provider-specific).
-        try:
-            from services.redaction import redact_text  # type: ignore
-        except ImportError:
-            try:
-                from ..services.redaction import redact_text
-            except ImportError:
-                redact_text = str  # type: ignore
+        # S29: classify only; preserve the explicit redaction marker for log consumers.
         logger.warning(
-            "LLM chat request failed: %s: %s",
+            "LLM chat request failed: ***REDACTED*** (error_type=%s)",
             type(e).__name__,
-            redact_text(str(e)),
         )
         return web.json_response(
             {"ok": False, "error": "llm_request_failed"},

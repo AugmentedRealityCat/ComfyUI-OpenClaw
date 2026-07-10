@@ -128,7 +128,7 @@ def _json_loads_safe(raw: Any) -> Dict[str, Any]:
     try:
         parsed = json.loads(raw)
         return parsed if isinstance(parsed, dict) else {}
-    except Exception:
+    except (TypeError, ValueError):
         return {}
 
 
@@ -685,7 +685,9 @@ class SlackWebhookServer:
                         },
                     )
         except Exception as e:
-            logger.exception(f"Error handling Slack event: {e}")
+            logger.error(
+                "Slack event handling failed (error_type=%s)", type(e).__name__
+            )
 
     async def process_interaction_payload(self, payload: Dict[str, Any]) -> bool:
         interaction_type = str(payload.get("type", "") or "").strip()

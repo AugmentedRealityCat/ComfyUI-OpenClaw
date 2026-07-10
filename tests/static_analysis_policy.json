@@ -122,16 +122,9 @@
     {
       "tool": "mypy",
       "path": "api/config.py",
-      "code": "no-redef",
-      "message": "Name \"redact_text\" already defined (possibly by an import)",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/config.py",
       "code": "unused-ignore",
       "message": "Unused \"type: ignore\" comment",
-      "count": 7
+      "count": 6
     },
     {
       "tool": "mypy",

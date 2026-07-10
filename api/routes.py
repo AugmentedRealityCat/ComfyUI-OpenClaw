@@ -972,7 +972,10 @@ def _resolve_mae_profile() -> str:
         runtime_profile = get_runtime_profile().value
         if runtime_profile == "hardened":
             return "hardened"
-    except Exception:
+    except ImportError:
+        # IMPORTANT: optional standalone import absence may fall back to the deployment
+        # profile, but unexpected resolver failures must propagate instead of downgrading
+        # hardened posture silently.
         pass
     return profile or "local"
 

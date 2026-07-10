@@ -65,16 +65,41 @@ def _mark_startup_fatal(phase: str, exc: BaseException) -> None:
         )
 
 
-def _register_plugins_and_shutdown_hooks() -> None:
-    # R67: Best-effort process shutdown hook for scheduler/failover flush.
-    try:
-        from .plugins.builtin import register_all
-        from .runtime_lifecycle import register_shutdown_hooks
+def _load_plugin_shutdown_registrars():
+    """Load optional startup registrars behind one patchable compatibility seam."""
 
-        register_shutdown_hooks()
-        register_all()
-    except Exception as e:
-        logging.getLogger("ComfyUI-OpenClaw").error(f"Failed to register plugins: {e}")
+    from .plugins.builtin import register_all
+    from .runtime_lifecycle import register_shutdown_hooks
+
+    return register_shutdown_hooks, register_all
+
+
+def _register_plugins_and_shutdown_hooks() -> None:
+    # R67: Best-effort process shutdown hook and built-in plugin registration.
+    try:
+        register_shutdown_hooks, register_all = _load_plugin_shutdown_registrars()
+    except ImportError as exc:
+        logging.getLogger("ComfyUI-OpenClaw").error(
+            "Optional startup registrars unavailable (error_type=%s)",
+            type(exc).__name__,
+        )
+        return
+
+    logger = logging.getLogger("ComfyUI-OpenClaw")
+    for component, registrar in (
+        ("shutdown_hooks", register_shutdown_hooks),
+        ("builtin_plugins", register_all),
+    ):
+        try:
+            registrar()
+        except Exception as exc:
+            # IMPORTANT: these optional steps are independent. Keep startup available,
+            # do not echo exception content, and do not catch BaseException cancellation.
+            logger.error(
+                "Optional startup registrar failed (component=%s, error_type=%s)",
+                component,
+                type(exc).__name__,
+            )
 
 
 def _initialize_registries_and_security_gate() -> None:

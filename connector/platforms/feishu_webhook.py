@@ -182,7 +182,7 @@ def _json_loads_safe(raw: str) -> Dict[str, Any]:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
             return parsed
-    except Exception:
+    except (TypeError, ValueError):
         pass
     return {}
 
