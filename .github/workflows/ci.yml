@@ -106,10 +106,14 @@ jobs:
           # CRITICAL: Python 3.10 coverage reads pyproject.toml only when the
           # TOML extra is present; do not downgrade this back to plain coverage.
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements-quality.txt
           python -m pip install numpy pillow aiohttp "coverage[toml]"
       - name: R120 preflight
         run: |
           python scripts/preflight_check.py --strict
+      - name: Static-analysis policy
+        run: |
+          python scripts/verify_static_analysis_policy.py
       - name: Run MAE hard-guarantee suites
         env:
           MOLTBOT_STATE_DIR: ${{ github.workspace }}/moltbot_state/_ci_mae

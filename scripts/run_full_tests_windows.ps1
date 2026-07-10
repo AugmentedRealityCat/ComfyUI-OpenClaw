@@ -195,6 +195,16 @@ if (-not $hasCoverageTomlSupport) {
   Invoke-Checked "pip install coverage[toml]" { & $venvPython -m pip install "coverage[toml]" }
 }
 
+$qualityToolsReady = $true
+& $venvPython -c "import json, sys; from importlib.metadata import version; p=json.load(open('tests/static_analysis_policy.json', encoding='utf-8')); sys.exit(0 if all(version(name)==cfg['version'] for name,cfg in p['tools'].items()) else 1)" | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  $qualityToolsReady = $false
+}
+if (-not $qualityToolsReady) {
+  Write-Host "[tests] Installing pinned Ruff/Mypy into project venv ..."
+  Invoke-Checked "pip install quality tools" { & $venvPython -m pip install -r requirements-quality.txt }
+}
+
 # Ensure Node >= 18
 $nodeMajor = [int]((& node -p "process.versions.node.split('.')[0]").Trim())
 if ($nodeMajor -lt 18) {
@@ -266,6 +276,11 @@ Invoke-Checked "supply-chain hardening check" {
   & $venvPython scripts\check_supply_chain_hardening.py
 }
 Ensure-NpmDeps
+
+Write-Host "[tests] 0.5/11 static analysis policy"
+Invoke-Checked "static analysis policy" {
+  & $venvPython scripts/verify_static_analysis_policy.py
+}
 
 Write-Host "[tests] 0/8 R120 dependency preflight"
 Invoke-Checked "preflight_check" { & $venvPython scripts\preflight_check.py --strict }

@@ -71,9 +71,12 @@ target-version = ["py310"]
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
-warn_unused_configs = true
+warn_unused_configs = false
 disallow_untyped_defs = false  # Start lenient, can tighten later
 disallow_any_unimported = false
+explicit_package_bases = true
+no_site_packages = true
+ignore_missing_imports = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
@@ -81,8 +84,17 @@ warn_no_return = true
 check_untyped_defs = true
 strict_equality = true
 
-# Paths to check
-files = ["*.py", "tests/**/*.py"]
+# Production paths governed by tests/static_analysis_policy.json.
+files = [
+    "__init__.py",
+    "config.py",
+    "api",
+    "connector",
+    "models",
+    "nodes",
+    "services",
+    "scripts",
+]
 
 # Ignore missing imports for ComfyUI and external packages
 [[tool.mypy.overrides]]

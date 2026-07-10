@@ -41,6 +41,16 @@ repos:
         language: python
         pass_filenames: false
         always_run: true
+      - id: static-analysis-policy
+        name: incremental Ruff/Mypy static-analysis policy
+        # Keep isolated pins aligned with requirements-quality.txt and policy JSON.
+        entry: python -B scripts/verify_static_analysis_policy.py
+        language: python
+        additional_dependencies:
+          - ruff==0.15.20
+          - mypy==2.2.0
+        pass_filenames: false
+        always_run: true
 
   # Secret detection
   - repo: https://github.com/Yelp/detect-secrets

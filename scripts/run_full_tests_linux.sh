@@ -123,6 +123,12 @@ if ! "$VENV_PY" -c "import cryptography" >/dev/null 2>&1; then
   echo "[tests] Installing cryptography into project venv ($VENV_DIR) ..."
   pip_install_or_fail "required for S57 secrets-at-rest encryption tests" cryptography
 fi
+
+if ! "$VENV_PY" -c "import json, sys; from importlib.metadata import version; p=json.load(open('tests/static_analysis_policy.json', encoding='utf-8')); sys.exit(0 if all(version(name)==cfg['version'] for name,cfg in p['tools'].items()) else 1)" >/dev/null 2>&1; then
+  echo "[tests] Installing pinned Ruff/Mypy into project venv ($VENV_DIR) ..."
+  pip_install_or_fail "required for static-analysis policy" -r requirements-quality.txt
+fi
+
 if ! "$VENV_PY" -c "import defusedxml" >/dev/null 2>&1; then
   # IMPORTANT: keep local full-test bootstrap aligned with requirements.txt.
   echo "[tests] Installing defusedxml into project venv ($VENV_DIR) ..."
@@ -193,6 +199,9 @@ echo "[tests] 0/11 supply-chain hardening check"
 "$VENV_PY" scripts/check_supply_chain_hardening.py
 
 ensure_npm_deps
+
+echo "[tests] 0.5/11 static analysis policy"
+"$VENV_PY" scripts/verify_static_analysis_policy.py
 
 echo "[tests] 0/9 R120 dependency preflight"
 "$VENV_PY" scripts/preflight_check.py --strict
