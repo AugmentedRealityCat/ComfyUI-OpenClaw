@@ -26,6 +26,12 @@ HISTORY_TIMEOUT = 5
 PREVIEWABLE_MEDIA_TYPES = ("images", "video", "audio", "3d", "text")
 THREE_D_EXTENSIONS = (".obj", ".fbx", ".gltf", ".glb", ".usdz")
 TEXT_PREVIEW_MAX_LENGTH = 1024
+FILE_TEXT_EXTENSIONS = frozenset(
+    {"txt", "md", "markdown", "json", "csv", "yaml", "yml", "xml", "log"}
+)
+FILE_OUTPUT_MAX_REFS = 64
+FILE_OUTPUT_FIELD_MAX_LENGTH = 1024
+FILE_OUTPUT_TYPES = frozenset({"input", "output", "temp"})
 
 
 def _pick_string(payload: Dict[str, Any], *keys: str) -> str:
@@ -84,6 +90,77 @@ def _normalize_text_content(value: Any) -> Optional[Dict[str, Any]]:
         "view_url": "",
         "content": text,
         "text_truncated": truncated,
+    }
+
+
+def _has_unsafe_file_characters(value: str) -> bool:
+    return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _normalize_file_text_ref(output_ref: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(output_ref, dict):
+        return None
+
+    raw_filename = output_ref.get("filename")
+    if not isinstance(raw_filename, str):
+        return None
+    if len(raw_filename) > FILE_OUTPUT_FIELD_MAX_LENGTH:
+        return None
+    filename = raw_filename.strip()
+    if (
+        not filename
+        or len(filename) > FILE_OUTPUT_FIELD_MAX_LENGTH
+        or _has_unsafe_file_characters(filename)
+        or filename in {".", ".."}
+        or "/" in filename
+        or "\\" in filename
+    ):
+        return None
+
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if suffix not in FILE_TEXT_EXTENSIONS:
+        return None
+
+    raw_subfolder = output_ref.get("subfolder", "")
+    if not isinstance(raw_subfolder, str):
+        return None
+    if len(raw_subfolder) > FILE_OUTPUT_FIELD_MAX_LENGTH:
+        return None
+    subfolder = raw_subfolder.strip()
+    if (
+        len(subfolder) > FILE_OUTPUT_FIELD_MAX_LENGTH
+        or _has_unsafe_file_characters(subfolder)
+        or "\\" in subfolder
+        or subfolder.startswith("/")
+        or any(part in {".", ".."} for part in subfolder.split("/") if part)
+    ):
+        return None
+
+    raw_type = output_ref.get("type", "output")
+    if not isinstance(raw_type, str):
+        return None
+    output_type = raw_type.strip() or "output"
+    if output_type not in FILE_OUTPUT_TYPES:
+        return None
+
+    # SECURITY: file-backed text refs are attacker-influenced. Build only the
+    # existing encoded /view contract from validated fields; never trust raw URLs.
+    params = {"filename": filename, "type": output_type}
+    if subfolder:
+        params["subfolder"] = subfolder
+
+    return {
+        "filename": filename,
+        "subfolder": subfolder,
+        "type": output_type,
+        "media_type": "text",
+        "asset_hash": "",
+        "asset_api_id": "",
+        "asset_api_required": False,
+        "resolution": "view",
+        "view_url": f"{COMFYUI_URL}/view?{urlencode(params)}",
+        "content": "",
+        "text_truncated": False,
     }
 
 
@@ -195,6 +272,13 @@ def extract_output_refs(history_item: Dict[str, Any]) -> List[Dict[str, Any]]:
                 continue
             for ref in refs:
                 normalized = normalize_history_output_ref(ref, media_type)
+                if normalized:
+                    results.append(normalized)
+
+        file_refs = node_output.get("files")
+        if isinstance(file_refs, list) and len(file_refs) <= FILE_OUTPUT_MAX_REFS:
+            for ref in file_refs:
+                normalized = _normalize_file_text_ref(ref)
                 if normalized:
                     results.append(normalized)
 

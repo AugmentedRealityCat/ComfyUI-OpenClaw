@@ -12,6 +12,7 @@ Newest entries appear first.
 - Refreshed the active compatibility baseline to ComfyUI `1377a2f7` (`v0.27.0-47-g1377a2f7`, pyproject `0.27.0`) and standalone frontend `1.48.1` (`ceb5ae1eba`, `v1.48.1-1-gceb5ae1eba`).
 - Kept Desktop pinned separately at `0.9.4` with core `0.22.3` and embedded frontend `1.43.18`, explicitly lagging the standalone frontend reference.
 - Documented current host asset `loader_path` and namespaced model-tag schema without adopting direct `/api/assets` runtime access or changing OpenClaw's Node.js 18+ test policy.
+- Added bounded Job Monitor previews for allowlisted text refs emitted under the host `files` output key, using only same-origin `/view`, strict textual MIME/UTF-8 streaming limits, literal DOM text, and explicit source-link fallback states.
 
 </details>
 

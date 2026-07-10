@@ -21,7 +21,8 @@
     "tests.test_s100_jobs_security_contract",
     "tests.test_r213_jobs_endpoint",
     "tests.connector.test_r214_jobs_command",
-    "tests.test_s70_ssrf_pinning_regression"
+    "tests.test_s70_ssrf_pinning_regression",
+    "tests.test_r216_file_backed_text_output"
   ],
   "no_skip_module_metadata": {
     "tests.test_s58_bridge_token_lifecycle": {
@@ -106,6 +107,10 @@
     },
     "tests.test_s70_ssrf_pinning_regression": {
       "reason": "SSRF pinning regression is a security-critical boundary test and must never degrade to skip coverage.",
+      "review_after": "2026-10-31"
+    },
+    "tests.test_r216_file_backed_text_output": {
+      "reason": "File-backed text output coverage guards untrusted file refs, bounded retrieval, and inert rendering and must remain non-skippable.",
       "review_after": "2026-10-31"
     }
   }

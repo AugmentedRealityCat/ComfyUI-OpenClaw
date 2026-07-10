@@ -96,8 +96,11 @@ Preflight workflow diagnostics contract:
 History and output-ref contract:
 
 - history/output consumers SHOULD treat the normalized output-ref contract as media-aware
-- current previewable output groups are `images`, `video`, `audio`, `3d`, and bounded `text`
+- current previewable output groups are `images`, `video`, `audio`, `3d`, bounded inline `text`, and allowlisted file-backed text refs from the host `files` key
 - file-like refs that can be represented through `/view` remain on the bounded `/history` + `/view` preview path
+- file-backed text admission is limited to `.txt`, `.md`, `.markdown`, `.json`, `.csv`, `.yaml`, `.yml`, `.xml`, and `.log`; clients MUST build the URL from normalized filename/subfolder/type fields rather than trust a history-provided URL
+- browser text previews MUST remain same-origin `/view` GET requests, reject redirects and active/ambiguous MIME types, use strict UTF-8, stream at most 64 KiB within 5 seconds, display at most 4,096 characters, and degrade to a source link when safe streaming is unavailable
+- fetched text MUST be inserted as literal text; HTML, Markdown, SVG/XML, ANSI, or script interpretation is not part of this contract
 - `asset_hash` / `hash` metadata is optional because current ComfyUI host asset hashing is opt-in through `--enable-asset-hashing`; clients MUST NOT require hashes for normal filename-backed previews
 - refs with `asset_hash` or `hash` values, when host metadata provides them, preview through `/view?filename=blake3:...`
 - refs that only expose upstream asset-service identifiers remain explicit `asset_api_required` states; clients MUST NOT silently infer direct `/api/assets` fetching from that marker

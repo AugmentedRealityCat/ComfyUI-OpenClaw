@@ -2,6 +2,10 @@ const PREVIEWABLE_MEDIA_TYPES = new Set(["images", "video", "audio", "3d", "text
 const THREE_D_EXTENSIONS = [".obj", ".fbx", ".gltf", ".glb", ".usdz"];
 const HDR_IMAGE_EXTENSIONS = [".exr", ".hdr"];
 const TEXT_PREVIEW_MAX_LENGTH = 1024;
+const FILE_TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "csv", "yaml", "yml", "xml", "log"]);
+const FILE_OUTPUT_TYPES = new Set(["input", "output", "temp"]);
+const FILE_OUTPUT_MAX_REFS = 64;
+const FILE_OUTPUT_FIELD_MAX_LENGTH = 1024;
 
 function pickAssetHash(imageRef = {}) {
     if (!imageRef || typeof imageRef !== "object") {
@@ -138,6 +142,99 @@ function normalizeTextOutputRef(value) {
     };
 }
 
+function hasUnsafeFileCharacters(value = "") {
+    return Array.from(String(value)).some((char) => {
+        const code = char.charCodeAt(0);
+        return code < 32 || code === 127;
+    });
+}
+
+function codePointLength(value = "") {
+    return Array.from(String(value)).length;
+}
+
+function normalizeFileTextOutputRef(outputRef) {
+    if (!outputRef || typeof outputRef !== "object" || Array.isArray(outputRef)) {
+        return null;
+    }
+
+    if (typeof outputRef.filename !== "string") {
+        return null;
+    }
+    if (codePointLength(outputRef.filename) > FILE_OUTPUT_FIELD_MAX_LENGTH) {
+        return null;
+    }
+    const filename = outputRef.filename.trim();
+    if (
+        !filename
+        || codePointLength(filename) > FILE_OUTPUT_FIELD_MAX_LENGTH
+        || hasUnsafeFileCharacters(filename)
+        || filename === "."
+        || filename === ".."
+        || filename.includes("/")
+        || filename.includes("\\")
+    ) {
+        return null;
+    }
+    const dotIndex = filename.lastIndexOf(".");
+    const suffix = dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : "";
+    if (!FILE_TEXT_EXTENSIONS.has(suffix)) {
+        return null;
+    }
+
+    if (outputRef.subfolder !== undefined && typeof outputRef.subfolder !== "string") {
+        return null;
+    }
+    if (
+        typeof outputRef.subfolder === "string"
+        && codePointLength(outputRef.subfolder) > FILE_OUTPUT_FIELD_MAX_LENGTH
+    ) {
+        return null;
+    }
+    const subfolder = typeof outputRef.subfolder === "string" ? outputRef.subfolder.trim() : "";
+    if (
+        codePointLength(subfolder) > FILE_OUTPUT_FIELD_MAX_LENGTH
+        || hasUnsafeFileCharacters(subfolder)
+        || subfolder.includes("\\")
+        || subfolder.startsWith("/")
+        || subfolder.split("/").some((part) => part === "." || part === "..")
+    ) {
+        return null;
+    }
+
+    if (outputRef.type !== undefined && typeof outputRef.type !== "string") {
+        return null;
+    }
+    const type = typeof outputRef.type === "string" && outputRef.type.trim()
+        ? outputRef.type.trim()
+        : "output";
+    if (!FILE_OUTPUT_TYPES.has(type)) {
+        return null;
+    }
+
+    // SECURITY: accept only validated host fields and the existing encoded /view
+    // seam. Raw URL or asset fields on a files entry are never fetch targets.
+    return {
+        filename,
+        subfolder,
+        type,
+        media_type: "text",
+        asset_hash: "",
+        asset_api_id: "",
+        asset_api_required: false,
+        resolution: "view",
+        unsupported_reason: "",
+        is_asset_backed: false,
+        content: "",
+        text_truncated: false,
+        viewParams: {
+            filename,
+            type,
+            ...(subfolder ? { subfolder } : {}),
+        },
+    };
+}
+
 export function normalizeComfyOutputRef(imageRef = {}, mediaType = "images") {
     let outputRef = imageRef;
     const resolvedMediaType = resolveMediaType(outputRef, mediaType);
@@ -221,6 +318,16 @@ export function extractHistoryOutputRefs(historyItem = {}) {
             }
             for (const imageRef of refs) {
                 const normalized = normalizeComfyOutputRef(imageRef, mediaType);
+                if (normalized) {
+                    results.push(normalized);
+                }
+            }
+        }
+
+        const fileRefs = nodeOutput.files;
+        if (Array.isArray(fileRefs) && fileRefs.length <= FILE_OUTPUT_MAX_REFS) {
+            for (const fileRef of fileRefs) {
+                const normalized = normalizeFileTextOutputRef(fileRef);
                 if (normalized) {
                     results.push(normalized);
                 }

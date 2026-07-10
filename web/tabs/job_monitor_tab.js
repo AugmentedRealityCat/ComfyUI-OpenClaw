@@ -4,6 +4,10 @@
  */
 import { openclawApi } from "../openclaw_api.js";
 import { extractHistoryOutputRefs, isHdrImageOutputRef } from "../openclaw_asset_refs.js";
+import {
+    loadBoundedTextOutput,
+    resolveTextOutputViewUrl,
+} from "../openclaw_text_output.js";
 import { parseJsonSafe } from "../openclaw_utils.js";
 
 const POLL_INTERVAL_MS = 2000;
@@ -83,9 +87,17 @@ export const jobMonitorTab = {
         listContainer.id = "openclaw-job-list";
         container.appendChild(listContainer);
 
+        let textPreviewGeneration = 0;
+        const textPreviewControllers = new Set();
         renderJobList();
 
         function renderJobList() {
+            textPreviewGeneration += 1;
+            const renderGeneration = textPreviewGeneration;
+            for (const controller of textPreviewControllers) {
+                controller.abort();
+            }
+            textPreviewControllers.clear();
             listContainer.innerHTML = "";
 
             if (currentJobs.length === 0) {
@@ -237,6 +249,82 @@ export const jobMonitorTab = {
                                 ? `${out.content}\n...`
                                 : out.content;
                             outputGrid.appendChild(textOutput);
+                            return;
+                        }
+
+                        if (out.media_type === "text" && out.view_url) {
+                            const safeViewUrl = resolveTextOutputViewUrl(out.view_url);
+                            const textFileOutput = document.createElement("div");
+                            textFileOutput.className = "openclaw-job-output-fallback openclaw-job-output-text-file";
+                            textFileOutput.style.width = "200px";
+                            textFileOutput.style.minHeight = "80px";
+                            textFileOutput.style.padding = "6px";
+                            textFileOutput.style.fontSize = "10px";
+                            textFileOutput.style.lineHeight = "1.35";
+                            textFileOutput.style.border = "1px dashed var(--border-color)";
+                            textFileOutput.style.borderRadius = "6px";
+                            textFileOutput.style.background = "var(--comfy-menu-bg, rgba(255,255,255,0.04))";
+                            textFileOutput.title = out.filename || "Text output";
+
+                            const status = document.createElement("div");
+                            status.className = "openclaw-job-output-text-status";
+                            status.textContent = "Loading text preview...";
+                            textFileOutput.appendChild(status);
+
+                            const content = document.createElement("div");
+                            content.className = "openclaw-job-output-text-content";
+                            content.style.marginTop = "4px";
+                            content.style.whiteSpace = "pre-wrap";
+                            content.style.overflowWrap = "anywhere";
+                            content.textContent = "";
+                            textFileOutput.appendChild(content);
+
+                            const sourceLink = document.createElement("a");
+                            sourceLink.className = "openclaw-job-output-text-source";
+                            if (safeViewUrl) {
+                                sourceLink.href = safeViewUrl;
+                            }
+                            sourceLink.target = "_blank";
+                            sourceLink.rel = "noopener noreferrer";
+                            sourceLink.textContent = safeViewUrl ? "Open source" : "Source unavailable";
+                            sourceLink.style.display = safeViewUrl ? "inline-block" : "none";
+                            sourceLink.style.marginTop = "6px";
+                            textFileOutput.appendChild(sourceLink);
+                            outputGrid.appendChild(textFileOutput);
+
+                            if (!safeViewUrl) {
+                                status.textContent = "Text preview unavailable.";
+                                return;
+                            }
+
+                            const controller = new AbortController();
+                            textPreviewControllers.add(controller);
+                            loadBoundedTextOutput(safeViewUrl, { signal: controller.signal })
+                                .then((result) => {
+                                    if (
+                                        controller.signal.aborted
+                                        || renderGeneration !== textPreviewGeneration
+                                        || !textFileOutput.isConnected
+                                    ) {
+                                        return;
+                                    }
+                                    if (result.status === "success" || result.status === "truncated") {
+                                        // SECURITY: fetched bytes must remain literal text. Never
+                                        // replace this with HTML or Markdown rendering.
+                                        content.textContent = result.content;
+                                        status.textContent = result.status === "truncated"
+                                            ? "Text preview truncated."
+                                            : "Text preview.";
+                                        return;
+                                    }
+                                    content.textContent = "";
+                                    status.textContent = result.reason === "oversized"
+                                        ? "Text preview too large."
+                                        : "Text preview unavailable.";
+                                })
+                                .finally(() => {
+                                    textPreviewControllers.delete(controller);
+                                });
                             return;
                         }
 

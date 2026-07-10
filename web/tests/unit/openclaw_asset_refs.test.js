@@ -335,6 +335,104 @@ describe("openclaw asset refs", () => {
         expect(output.text_truncated).toBe(true);
     });
 
+    it("normalizes the official files/result.txt shape as file-backed text", () => {
+        const outputs = extractHistoryOutputRefs({
+            outputs: {
+                "9": {
+                    files: [{ filename: "result.txt", subfolder: "", type: "output" }],
+                    text: "some generated text",
+                },
+            },
+        });
+
+        expect(outputs).toHaveLength(1);
+        expect(outputs[0]).toEqual(expect.objectContaining({
+            filename: "result.txt",
+            media_type: "text",
+            resolution: "view",
+            content: "",
+            text_truncated: false,
+            viewParams: { filename: "result.txt", type: "output" },
+        }));
+    });
+
+    it("accepts only bounded allowlisted text file refs", () => {
+        const suffixes = ["txt", "md", "markdown", "json", "csv", "yaml", "yml", "xml", "log"];
+        const files = [
+            ...suffixes.map((suffix) => ({ filename: `result.${suffix.toUpperCase()}`, type: "output" })),
+            { filename: "image.png", type: "output" },
+            { filename: "archive.bin", type: "output" },
+            { filename: "README", type: "output" },
+            "result.txt",
+            null,
+        ];
+
+        const outputs = extractHistoryOutputRefs({ outputs: { "9": { files } } });
+
+        expect(outputs).toHaveLength(suffixes.length);
+        expect(outputs.every((output) => output.media_type === "text")).toBe(true);
+        expect(outputs.some((output) => output.media_type === "images")).toBe(false);
+    });
+
+    it("fails closed for oversized files containers and unsafe file fields", () => {
+        const oversized = Array.from({ length: 65 }, (_, index) => ({
+            filename: `result-${index}.txt`,
+            type: "output",
+        }));
+        expect(extractHistoryOutputRefs({ outputs: { "9": { files: oversized } } })).toEqual([]);
+
+        const invalidRefs = [
+            { filename: `${"x".repeat(1021)}.txt`, type: "output" },
+            { filename: "result.txt", subfolder: "x".repeat(1025), type: "output" },
+            { filename: "../result.txt", type: "output" },
+            { filename: "folder/result.txt", type: "output" },
+            { filename: "result.txt", subfolder: "../private", type: "output" },
+            { filename: "result.txt", subfolder: "/absolute", type: "output" },
+            { filename: "result.txt", type: "unknown" },
+            { filename: 123, type: "output" },
+        ];
+        for (const ref of invalidRefs) {
+            expect(extractHistoryOutputRefs({ outputs: { "9": { files: [ref] } } })).toEqual([]);
+        }
+    });
+
+    it("builds file text view params only from normalized fields", () => {
+        const output = extractHistoryOutputRefs({
+            outputs: {
+                "9": {
+                    files: [{
+                        filename: "report 1.txt",
+                        subfolder: "reports/2026",
+                        type: "temp",
+                        url: "https://evil.example/secret.txt",
+                    }],
+                },
+            },
+        })[0];
+
+        expect(output.viewParams).toEqual({
+            filename: "report 1.txt",
+            subfolder: "reports/2026",
+            type: "temp",
+        });
+        expect(JSON.stringify(output)).not.toContain("evil.example");
+    });
+
+    it("counts Unicode code points consistently and rejects trim-based bound bypasses", () => {
+        expect(extractHistoryOutputRefs({
+            outputs: { "9": { files: [{ filename: `${"😀".repeat(1020)}.txt`, type: "output" }] } },
+        })).toHaveLength(1);
+
+        const rejected = [
+            { filename: `${"😀".repeat(1021)}.txt`, type: "output" },
+            { filename: `${" ".repeat(1025)}safe.txt`, type: "output" },
+            { filename: "safe.txt", subfolder: `${" ".repeat(1025)}reports`, type: "output" },
+        ];
+        for (const ref of rejected) {
+            expect(extractHistoryOutputRefs({ outputs: { "9": { files: [ref] } } })).toEqual([]);
+        }
+    });
+
     it("detects HDR image refs by filename suffix without treating hashes as HDR", () => {
         expect(isHdrImageFilename("render.EXR")).toBe(true);
         expect(isHdrImageFilename("studio.hdr")).toBe(true);
