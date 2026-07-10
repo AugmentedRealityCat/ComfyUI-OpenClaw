@@ -31,7 +31,10 @@ AUTH_CLASS_BY_ROUTE = {
     # high-sensitivity prompt/runtime context (S34). Keep this auth class in
     # sync with api/logs_tail.py to avoid accidental privilege regression.
     ("GET", "/logs/tail"): "admin",
-    ("GET", "/jobs"): "public-safe",
+    # IMPORTANT: jobs exposes cross-job operational metadata once R213 replaces
+    # the stub. Keep explicit runtime Admin enforcement aligned with metadata,
+    # OpenAPI, and the public API contract (S100).
+    ("GET", "/jobs"): "admin",
     # IMPORTANT:
     # Trace endpoint now returns high-sensitivity execution context and is
     # intentionally admin-only (S34). Keep as admin to prevent data leakage.

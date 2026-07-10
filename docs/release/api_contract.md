@@ -1,8 +1,8 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.13
-> **Date**: 2026-07-08
+> **Version**: 1.0.14
+> **Date**: 2026-07-10
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
 
@@ -45,7 +45,7 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 | `GET` | `/events/stream` | `/moltbot/events/stream` | Observability | SSE stream of job lifecycle events with resume support. |
 | `GET` | `/config` | `/moltbot/config` | Observability | Read-only view of sanitized provider config. |
 | `PUT` | `/config` | `/moltbot/config` | Admin | Update system configuration. |
-| `GET` | `/jobs` | `/moltbot/jobs` | Observability | List recent jobs (Stub/Not Implemented). |
+| `GET` | `/jobs` | `/moltbot/jobs` | Admin | List recent jobs (Admin-authorized compatibility stub until the bounded read adapter is available). |
 | `POST` | `/preflight` | `/moltbot/preflight` | Admin | Analyze a workflow or API prompt payload for missing nodes/models and portability diagnostics. |
 | `GET` | `/preflight/inventory` | `/moltbot/preflight/inventory` | Admin | Snapshot-first inventory of nodes/models for operator diagnostics, including refresh-state metadata. |
 

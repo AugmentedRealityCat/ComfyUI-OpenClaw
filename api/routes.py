@@ -66,6 +66,10 @@ except ModuleNotFoundError:  # pragma: no cover (optional for unit tests)
 
 PACK_NAME = PACK_VERSION = PACK_START_TIME = LOG_FILE = get_api_key = None  # type: ignore
 metrics = tail_log = require_observability_access = check_rate_limit = trace_store = None  # type: ignore
+require_admin_token = resolve_token_info = emit_audit_event = None  # type: ignore
+jobs_request_tenant_scope = normalize_jobs_query = build_jobs_audit_details = None  # type: ignore
+SAFE_JOB_AUDIT_OUTCOMES = None  # type: ignore
+JobsSecurityError = TenantBoundaryError = None  # type: ignore
 get_executor_diagnostics = None  # type: ignore
 webhook_handler = webhook_submit_handler = webhook_validate_handler = capabilities_handler = preflight_handler = None  # type: ignore
 pnginfo_handler = None  # type: ignore  # R168
@@ -276,11 +280,43 @@ if web is not None:
     # CRITICAL: These imports MUST remain present.
     # If edited out, module-level placeholders stay as None and handlers raise at runtime
     # (e.g., TypeError: 'NoneType' object is not callable), producing noisy aiohttp tracebacks.
-    (require_admin_token, require_observability_access) = import_attrs_dual(
+    (require_admin_token, require_observability_access, resolve_token_info) = (
+        import_attrs_dual(
+            __package__,
+            "..services.access_control",
+            "services.access_control",
+            (
+                "require_admin_token",
+                "require_observability_access",
+                "resolve_token_info",
+            ),
+        )
+    )
+    (emit_audit_event,) = import_attrs_dual(
         __package__,
-        "..services.access_control",
-        "services.access_control",
-        ("require_admin_token", "require_observability_access"),
+        "..services.audit",
+        "services.audit",
+        ("emit_audit_event",),
+    )
+    (
+        JobsSecurityError,
+        SAFE_JOB_AUDIT_OUTCOMES,
+        TenantBoundaryError,
+        build_jobs_audit_details,
+        jobs_request_tenant_scope,
+        normalize_jobs_query,
+    ) = import_attrs_dual(
+        __package__,
+        "..services.jobs_security",
+        "services.jobs_security",
+        (
+            "JobsSecurityError",
+            "SAFE_JOB_AUDIT_OUTCOMES",
+            "TenantBoundaryError",
+            "build_jobs_audit_details",
+            "jobs_request_tenant_scope",
+            "normalize_jobs_query",
+        ),
     )
     (tail_log,) = import_attrs_dual(
         __package__,
@@ -630,17 +666,82 @@ async def logs_tail_handler(request: web.Request) -> web.Response:
     auth=AuthTier.ADMIN,
     risk=RiskTier.LOW,
     summary="List jobs",
-    description="Stub endpoint for job listing.",
+    description="Admin-authorized jobs list contract (compatibility stub until adapter availability).",
     audit="jobs.list",
     plane=RoutePlane.ADMIN,
 )
 async def jobs_handler(request: web.Request) -> web.Response:
     """
-    GET /moltbot/jobs
-    Stub endpoint for job listing (not implemented yet).
+    GET /openclaw/jobs (legacy: /moltbot/jobs).
+    This handler secures the compatibility stub before a read adapter is wired.
     """
     if web is None:
         raise RuntimeError("aiohttp not available")
+
+    token_info = resolve_token_info(request)
+
+    if not check_rate_limit(request, "admin"):
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="rate_limit",
+            status_code=429,
+            reason="jobs_rate_limited",
+        )
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="jobs_rate_limited",
+            include_ok=True,
+        )
+
+    # CRITICAL: endpoint metadata is descriptive; this explicit guard is the
+    # runtime boundary that must remain before any queue/history access.
+    allowed, _error = require_admin_token(request)
+    if not allowed:
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="deny",
+            status_code=403,
+            reason="jobs_admin_required",
+        )
+        return web.json_response(
+            {"ok": False, "error": "jobs_admin_required"}, status=403
+        )
+
+    try:
+        with jobs_request_tenant_scope(request, token_info):
+            normalize_jobs_query(request.query)
+            _emit_jobs_list_audit(
+                request=request,
+                token_info=token_info,
+                outcome="allow",
+                status_code=200,
+                reason="stub",
+            )
+    except TenantBoundaryError as exc:
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="deny",
+            status_code=403,
+            reason=exc.code,
+        )
+        return web.json_response({"ok": False, "error": exc.code}, status=403)
+    except JobsSecurityError:
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="error",
+            status_code=400,
+            reason="jobs_query_invalid",
+        )
+        return web.json_response(
+            {"ok": False, "error": "jobs_query_invalid"}, status=400
+        )
+
     return web.json_response(
         {
             "ok": True,
@@ -648,6 +749,29 @@ async def jobs_handler(request: web.Request) -> web.Response:
             "not_implemented": True,
             "message": "Job persistence is not yet implemented. This is a stub endpoint.",
         }
+    )
+
+
+def _emit_jobs_list_audit(
+    *,
+    request,
+    token_info,
+    outcome: str,
+    status_code: int,
+    reason: str,
+    **counts,
+) -> None:
+    """Emit only content-free jobs audit dimensions."""
+
+    safe_outcome = outcome if outcome in SAFE_JOB_AUDIT_OUTCOMES else "error"
+    emit_audit_event(
+        action="jobs.list",
+        target="jobs",
+        outcome=safe_outcome,
+        token_info=token_info,
+        status_code=status_code,
+        details=build_jobs_audit_details(reason, **counts),
+        request=request,
     )
 
 

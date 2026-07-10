@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.13"
+  version: "1.0.14"
   description: "Generated from docs/release/api_contract.md."
 servers:
   - url: "/openclaw"
@@ -145,16 +145,16 @@ paths:
   /jobs:
     get:
       operationId: "get_jobs"
-      summary: "List recent jobs (Stub/Not Implemented)."
+      summary: "List recent jobs (Admin-authorized compatibility stub until the bounded read adapter is available)."
       responses:
         200:
           description: "OK"
-      x-openclaw-auth: "Observability"
+      x-openclaw-auth: "Admin"
       x-openclaw-section: "1.1 Core Observability & System"
       x-openclaw-legacy-path: "/moltbot/jobs"
-      x-openclaw-auth-tier: "observability"
+      x-openclaw-auth-tier: "admin"
       security:
-        - OpenClawObservabilityToken:
+        - OpenClawAdminToken:
             []
   /preflight:
     post:

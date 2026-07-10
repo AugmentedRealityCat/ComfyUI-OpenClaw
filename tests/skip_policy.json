@@ -18,6 +18,7 @@
     "tests.test_f57_slack_socket_mode_startup",
     "tests.test_connector_installation_registry",
     "tests.test_connector_callback_contract",
+    "tests.test_s100_jobs_security_contract",
     "tests.test_s70_ssrf_pinning_regression"
   ],
   "no_skip_module_metadata": {
@@ -87,6 +88,10 @@
     },
     "tests.test_connector_callback_contract": {
       "reason": "Connector callback contract protects external ingress normalization and approval wiring.",
+      "review_after": "2026-10-31"
+    },
+    "tests.test_s100_jobs_security_contract": {
+      "reason": "Jobs authorization, tenant isolation, and privacy projection are security-critical and must remain non-skippable.",
       "review_after": "2026-10-31"
     },
     "tests.test_s70_ssrf_pinning_regression": {
