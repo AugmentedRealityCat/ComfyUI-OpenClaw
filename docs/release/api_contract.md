@@ -1,7 +1,7 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.14
+> **Version**: 1.0.15
 > **Date**: 2026-07-10
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
@@ -45,9 +45,27 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 | `GET` | `/events/stream` | `/moltbot/events/stream` | Observability | SSE stream of job lifecycle events with resume support. |
 | `GET` | `/config` | `/moltbot/config` | Observability | Read-only view of sanitized provider config. |
 | `PUT` | `/config` | `/moltbot/config` | Admin | Update system configuration. |
-| `GET` | `/jobs` | `/moltbot/jobs` | Admin | List recent jobs (Admin-authorized compatibility stub until the bounded read adapter is available). |
+| `GET` | `/jobs` | `/moltbot/jobs` | Admin | List recent jobs through the versioned bounded in-process jobs read model. |
 | `POST` | `/preflight` | `/moltbot/preflight` | Admin | Analyze a workflow or API prompt payload for missing nodes/models and portability diagnostics. |
 | `GET` | `/preflight/inventory` | `/moltbot/preflight/inventory` | Admin | Snapshot-first inventory of nodes/models for operator diagnostics, including refresh-state metadata. |
+
+Jobs list contract:
+
+- `GET /openclaw/jobs` and its browser/legacy aliases are Admin-only and return
+  `contract_version: 1` from the bounded in-process ComfyUI jobs adapter.
+- Supported query fields are `status`, `workflow_id`, `sort_by`, `sort_order`, `limit`,
+  and `offset`. Status values are `pending`, `in_progress`, `completed`, `failed`, and
+  `cancelled`; sorting supports `created_at` or `execution_duration` with `asc`/`desc`.
+- The default/maximum page sizes are 50/200 and the source/offset window is capped at
+  10,000. Successful responses contain only `ok`, `contract_version`, `jobs`,
+  `pagination`, `source`, and `scan` at the top level.
+- Job summaries allow only `id`, `status`, bounded priority/timestamps, `outputs_count`,
+  and bounded `workflow_id`. `preview_output` is never included, and list responses never
+  include raw prompts, workflows, execution errors, tracebacks, current inputs/outputs,
+  tenant/client/trace identifiers, reasoning, or internal content.
+- An authoritative empty snapshot is HTTP 200 with `jobs: []`. Missing host helpers use
+  HTTP 501 `jobs_host_contract_unsupported`; unavailable or malformed snapshots use HTTP
+  503 `jobs_backend_unavailable`. These failures are never converted into empty success.
 
 Reasoning-content redaction contract:
 
@@ -285,6 +303,7 @@ All JSON responses (success or error) share a common structure:
 | `413` | Payload Too Large | Input size exceeds `OPENCLAW_MAX_RENDERED_WORKFLOW_BYTES` or similar limits. |
 | `429` | Too Many Requests | Rate limit or Execution Budget exceeded. |
 | `500` | Internal Error | Unhandled server exception. |
+| `501` | Not Implemented | Required current-host contract is unavailable (for example `jobs_host_contract_unsupported`). |
 | `503` | Unavailable | Feature disabled or service not wired. |
 
 Tenant-boundary error notes:

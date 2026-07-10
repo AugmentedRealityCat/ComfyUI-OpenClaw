@@ -40,6 +40,32 @@ def _decode(response) -> dict:
     return json.loads(response.text)
 
 
+def _authoritative_empty_jobs() -> dict:
+    return {
+        "ok": True,
+        "contract_version": 1,
+        "jobs": [],
+        "pagination": {
+            "limit": 50,
+            "offset": 0,
+            "warnings": [],
+            "total": 0,
+            "has_more": False,
+        },
+        "source": {
+            "adapter": "comfy_execution.jobs",
+            "authority": "in_process",
+        },
+        "scan": {
+            "window": 10000,
+            "examined": 0,
+            "excluded": 0,
+            "malformed": 0,
+            "truncated": False,
+        },
+    }
+
+
 def _load_security_module(testcase: unittest.TestCase):
     try:
         return importlib.import_module("services.jobs_security")
@@ -53,6 +79,13 @@ class TestJobsHandlerSecurity(unittest.IsolatedAsyncioTestCase):
         self.env = patch.dict(os.environ, {}, clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
+        from api import routes
+
+        self.adapter = patch.object(
+            routes, "read_jobs", return_value=_authoritative_empty_jobs()
+        )
+        self.adapter.start()
+        self.addCleanup(self.adapter.stop)
 
     async def test_remote_without_token_is_denied_with_triple_assert(self):
         from api import routes
@@ -92,7 +125,7 @@ class TestJobsHandlerSecurity(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(allowed.status, 200)
-        self.assertTrue(_decode(allowed)["not_implemented"])
+        self.assertEqual(_decode(allowed)["contract_version"], 1)
         self.assertEqual(denied.status, 403)
         self.assertEqual(_decode(denied)["error"], "jobs_admin_required")
         outcomes = [call.kwargs.get("outcome") for call in audit.call_args_list]
@@ -180,7 +213,15 @@ class TestJobsHandlerSecurity(unittest.IsolatedAsyncioTestCase):
             if call.kwargs.get("outcome") == "allow"
         ]
         self.assertEqual(len(allow), 1)
-        self.assertEqual(allow[0]["details"], {"reason": "stub"})
+        self.assertEqual(
+            allow[0]["details"],
+            {
+                "reason": "jobs_listed",
+                "returned_count": 0,
+                "excluded_count": 0,
+                "malformed_count": 0,
+            },
+        )
 
     async def test_multi_tenant_invalid_and_mismatched_contexts_are_audited(self):
         from api import routes

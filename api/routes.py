@@ -70,6 +70,7 @@ require_admin_token = resolve_token_info = emit_audit_event = None  # type: igno
 jobs_request_tenant_scope = normalize_jobs_query = build_jobs_audit_details = None  # type: ignore
 SAFE_JOB_AUDIT_OUTCOMES = None  # type: ignore
 JobsSecurityError = TenantBoundaryError = None  # type: ignore
+JobsHostContractUnsupported = JobsBackendUnavailable = read_jobs = None  # type: ignore
 get_executor_diagnostics = None  # type: ignore
 webhook_handler = webhook_submit_handler = webhook_validate_handler = capabilities_handler = preflight_handler = None  # type: ignore
 pnginfo_handler = None  # type: ignore  # R168
@@ -316,6 +317,20 @@ if web is not None:
             "build_jobs_audit_details",
             "jobs_request_tenant_scope",
             "normalize_jobs_query",
+        ),
+    )
+    (
+        JobsBackendUnavailable,
+        JobsHostContractUnsupported,
+        read_jobs,
+    ) = import_attrs_dual(
+        __package__,
+        "..services.jobs_read_model",
+        "services.jobs_read_model",
+        (
+            "JobsBackendUnavailable",
+            "JobsHostContractUnsupported",
+            "read_jobs",
         ),
     )
     (tail_log,) = import_attrs_dual(
@@ -666,14 +681,14 @@ async def logs_tail_handler(request: web.Request) -> web.Response:
     auth=AuthTier.ADMIN,
     risk=RiskTier.LOW,
     summary="List jobs",
-    description="Admin-authorized jobs list contract (compatibility stub until adapter availability).",
+    description="Admin-authorized versioned bounded in-process jobs read model.",
     audit="jobs.list",
     plane=RoutePlane.ADMIN,
 )
 async def jobs_handler(request: web.Request) -> web.Response:
     """
     GET /openclaw/jobs (legacy: /moltbot/jobs).
-    This handler secures the compatibility stub before a read adapter is wired.
+    This handler preserves the authorization and tenant boundary around the read model.
     """
     if web is None:
         raise RuntimeError("aiohttp not available")
@@ -712,14 +727,19 @@ async def jobs_handler(request: web.Request) -> web.Response:
         )
 
     try:
-        with jobs_request_tenant_scope(request, token_info):
-            normalize_jobs_query(request.query)
+        with jobs_request_tenant_scope(request, token_info) as tenant_context:
+            query = normalize_jobs_query(request.query)
+            body = read_jobs(query, tenant_id=tenant_context.tenant_id)
+            scan = body["scan"]
             _emit_jobs_list_audit(
                 request=request,
                 token_info=token_info,
                 outcome="allow",
                 status_code=200,
-                reason="stub",
+                reason="jobs_listed",
+                returned_count=len(body["jobs"]),
+                excluded_count=scan["excluded"],
+                malformed_count=scan["malformed"],
             )
     except TenantBoundaryError as exc:
         _emit_jobs_list_audit(
@@ -741,15 +761,30 @@ async def jobs_handler(request: web.Request) -> web.Response:
         return web.json_response(
             {"ok": False, "error": "jobs_query_invalid"}, status=400
         )
+    except JobsHostContractUnsupported:
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="unsupported",
+            status_code=501,
+            reason="jobs_host_contract_unsupported",
+        )
+        return web.json_response(
+            {"ok": False, "error": "jobs_host_contract_unsupported"}, status=501
+        )
+    except JobsBackendUnavailable:
+        _emit_jobs_list_audit(
+            request=request,
+            token_info=token_info,
+            outcome="error",
+            status_code=503,
+            reason="jobs_backend_unavailable",
+        )
+        return web.json_response(
+            {"ok": False, "error": "jobs_backend_unavailable"}, status=503
+        )
 
-    return web.json_response(
-        {
-            "ok": True,
-            "jobs": [],
-            "not_implemented": True,
-            "message": "Job persistence is not yet implemented. This is a stub endpoint.",
-        }
-    )
+    return web.json_response(body)
 
 
 def _emit_jobs_list_audit(

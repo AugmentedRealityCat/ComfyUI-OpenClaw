@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.14"
+  version: "1.0.15"
   description: "Generated from docs/release/api_contract.md."
 servers:
   - url: "/openclaw"
@@ -145,7 +145,7 @@ paths:
   /jobs:
     get:
       operationId: "get_jobs"
-      summary: "List recent jobs (Admin-authorized compatibility stub until the bounded read adapter is available)."
+      summary: "List recent jobs through the versioned bounded in-process jobs read model."
       responses:
         200:
           description: "OK"
