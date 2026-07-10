@@ -7,10 +7,8 @@ Registers /openclaw/* endpoints (and legacy /moltbot/*) against ComfyUI PromptSe
 # Do not move this import or insert code above it, or ComfyUI route registration will fail.
 from __future__ import annotations
 
-import json
 import os
-import sys
-import time
+from typing import cast
 
 if __package__ and "." in __package__:
     from ..services.import_fallback import import_attrs_dual
@@ -36,6 +34,46 @@ else:
         "build_core_route_specs",
         "build_pack_route_specs",
         "register_route_family",
+    ),
+)
+
+(
+    RouteHandlerDependencies,
+    emit_jobs_list_audit,
+    health_response,
+    jobs_response,
+    logs_tail_response,
+    owned_ensure_observability_deps_ready,
+    trace_response,
+) = import_attrs_dual(
+    __package__,
+    "..api.route_handlers",
+    "api.route_handlers",
+    (
+        "RouteHandlerDependencies",
+        "emit_jobs_list_audit",
+        "health_response",
+        "jobs_response",
+        "logs_tail_response",
+        "ensure_observability_deps_ready",
+        "trace_response",
+    ),
+)
+
+(
+    RouteRegistrationDependencies,
+    orchestrate_dual_route,
+    register_route_families,
+    run_mae_startup_gate,
+) = import_attrs_dual(
+    __package__,
+    "..api.route_orchestration",
+    "api.route_orchestration",
+    (
+        "RouteRegistrationDependencies",
+        "register_dual_route",
+        "register_route_families",
+        "run_mae_startup_gate",
     ),
 )
 
@@ -403,27 +441,47 @@ def check_dependency(module_name: str) -> bool:
         return False
 
 
+def _handler_dependencies():
+    """Capture facade patch seams for the owned route implementations."""
+
+    return RouteHandlerDependencies(
+        web=web,
+        pack_name=PACK_NAME,
+        pack_version=PACK_VERSION,
+        pack_start_time=PACK_START_TIME,
+        log_file=LOG_FILE,
+        metrics=metrics,
+        tail_log=tail_log,
+        require_observability_access=require_observability_access,
+        require_admin_token=require_admin_token,
+        check_rate_limit=check_rate_limit,
+        build_rate_limit_response=build_rate_limit_response,
+        trace_store=trace_store,
+        get_executor_diagnostics=get_executor_diagnostics,
+        redact_text=redact_text,
+        check_dependency=check_dependency,
+        resolve_token_info=resolve_token_info,
+        emit_audit_event=emit_audit_event,
+        jobs_request_tenant_scope=jobs_request_tenant_scope,
+        normalize_jobs_query=normalize_jobs_query,
+        build_jobs_audit_details=build_jobs_audit_details,
+        safe_job_audit_outcomes=SAFE_JOB_AUDIT_OUTCOMES,
+        jobs_security_error=JobsSecurityError,
+        tenant_boundary_error=TenantBoundaryError,
+        jobs_host_contract_unsupported=JobsHostContractUnsupported,
+        jobs_backend_unavailable=JobsBackendUnavailable,
+        read_jobs=read_jobs,
+        ensure_observability_deps_ready=_ensure_observability_deps_ready,
+    )
+
+
 def _ensure_observability_deps_ready() -> tuple[bool, str | None]:
-    """
-    Defensive guard against a recurring class of regressions:
-    if the import block above is edited incorrectly, the module-level
-    placeholders stay as None and handlers raise TypeError at runtime.
-    """
-    missing: list[str] = []
-    if not callable(require_observability_access):
-        missing.append("require_observability_access")
-    if not callable(check_rate_limit):
-        missing.append("check_rate_limit")
-    if not callable(tail_log):
-        missing.append("tail_log")
-    if missing:
-        return (
-            False,
-            "Backend not fully initialized (missing route dependencies: "
-            + ", ".join(missing)
-            + ").",
-        )
-    return True, None
+    """Preserve the established initialization-check patch seam."""
+
+    return cast(
+        tuple[bool, str | None],
+        owned_ensure_observability_deps_ready(_handler_dependencies()),
+    )
 
 
 @endpoint_metadata(
@@ -439,146 +497,7 @@ async def health_handler(request: web.Request) -> web.Response:
     GET /openclaw/health (legacy: /moltbot/health)
     Returns pack status, uptime, dependencies, config presence, and stats.
     """
-    if web is None:
-        raise RuntimeError("aiohttp not available")
-    try:
-        from ..services.llm_client import LLMClient
-        from ..services.providers.keys import requires_api_key
-    except ImportError:
-        from services.llm_client import LLMClient
-        from services.providers.keys import requires_api_key
-
-    uptime = time.time() - PACK_START_TIME
-
-    # Get provider info from LLMClient
-    provider_info = {
-        "provider": "unknown",
-        "key_configured": False,
-        "model": "unknown",
-        "base_url": None,
-        "api_type": None,
-    }
-    key_required = True
-    try:
-        client = LLMClient()
-        provider_info = client.get_provider_summary()
-        key_required = requires_api_key(provider_info.get("provider", "unknown"))
-    except Exception:
-        provider_info = {
-            "provider": "unknown",
-            "key_configured": False,
-            "model": "unknown",
-            "base_url": None,
-            "api_type": None,
-        }
-        key_required = True
-
-    # S15: Access Policy Info
-    try:
-        from ..services.access_control import is_loopback
-
-        token_val = (
-            os.environ.get("OPENCLAW_OBSERVABILITY_TOKEN")
-            or os.environ.get("MOLTBOT_OBSERVABILITY_TOKEN")
-            or ""
-        ).strip()
-        token_configured = bool(token_val)
-    except ImportError:
-        from services.access_control import is_loopback
-
-        token_val = (
-            os.environ.get("OPENCLAW_OBSERVABILITY_TOKEN")
-            or os.environ.get("MOLTBOT_OBSERVABILITY_TOKEN")
-            or ""
-        ).strip()
-        token_configured = bool(token_val)
-
-    # Determine basic policy state
-    policy_mode = "token" if token_configured else "loopback_only"
-
-    # Metrics snapshot
-    # Metrics snapshot (robust even if metrics implementation changes)
-    try:
-        m_snapshot = metrics.get_snapshot()
-    except Exception:
-        m_snapshot = {"errors_captured": 0, "logs_processed": 0}
-    try:
-        executor_snapshot = get_executor_diagnostics() or {}
-    except Exception:
-        executor_snapshot = {}
-
-    try:
-        if __package__ and "." in __package__:
-            from ..services.startup_lifecycle import get_startup_diagnostics
-        else:
-            from services.startup_lifecycle import get_startup_diagnostics
-
-        startup_diagnostics = get_startup_diagnostics()
-    except Exception:
-        startup_diagnostics = {"state": "unknown", "ready": False, "warmups": {}}
-
-    # Job Event Store Stats (Backpressure)
-    job_stats = {}
-    try:
-        from ..services.job_events import get_job_event_store
-
-        store = get_job_event_store()
-        job_stats = store.stats()
-    except Exception:
-        pass
-
-    # H3 (F55): Include control_plane info for frontend mode badge
-    cp_info = {}
-    runtime_prof = "minimal"
-    try:
-        try:
-            from ..services.capabilities import _get_control_plane_info
-            from ..services.runtime_profile import get_runtime_profile
-        except ImportError:
-            from services.capabilities import _get_control_plane_info
-            from services.runtime_profile import get_runtime_profile
-        cp_info = _get_control_plane_info()
-        runtime_prof = get_runtime_profile().value
-    except Exception:
-        pass
-
-    return web.json_response(
-        {
-            "ok": True,
-            "pack": {
-                "name": PACK_NAME,
-                "version": PACK_VERSION,
-                "dependencies": {
-                    "aiohttp": check_dependency("aiohttp"),
-                    "watchdog": check_dependency("watchdog"),
-                },
-            },
-            "uptime_sec": uptime,
-            "config": {
-                "provider": provider_info.get("provider"),
-                "model": provider_info.get("model"),
-                "base_url": provider_info.get("base_url"),
-                "api_type": provider_info.get("api_type"),
-                "llm_key_configured": provider_info.get("key_configured", False),
-                "llm_key_required": key_required,
-            },
-            "stats": {
-                "errors_captured": m_snapshot["errors_captured"],
-                "logs_processed": m_snapshot["logs_processed"],
-                "executors": executor_snapshot,  # R129
-                "observability": job_stats,  # R87
-            },
-            "startup": startup_diagnostics,
-            # S15: Exposure Detection
-            "access_policy": {
-                "observability": policy_mode,
-                "token_configured": token_configured,
-            },
-            # H3 (F55): Control plane mode for frontend badge
-            "control_plane": cp_info,
-            "runtime_profile": runtime_prof,
-        }
-    )
+    return await health_response(request, _handler_dependencies())
 
 
 @endpoint_metadata(
@@ -591,90 +510,8 @@ async def health_handler(request: web.Request) -> web.Response:
 )
 async def logs_tail_handler(request: web.Request) -> web.Response:
     """GET /moltbot/logs/tail - Returns the last N lines of the log file."""
-    if web is None:
-        raise RuntimeError("aiohttp not available")
-    ok, init_error = _ensure_observability_deps_ready()
-    if not ok:
-        return web.json_response({"ok": False, "error": init_error}, status=500)
-    # S34: Trace/Log data is high sensitivity -> Require Admin Token
-    allowed, error = require_admin_token(request)
-    if not allowed:
-        return web.json_response({"ok": False, "error": error}, status=403)
-
-    # S17: Rate Limit
-    if not check_rate_limit(request, "logs"):
-        return build_rate_limit_response(
-            request,
-            "logs",
-            web_module=web,
-            error="Rate limit exceeded",
-            include_ok=True,
-        )
-
-    try:
-        # Default 50 lines, max 500
-        # Support both 'n' (internal preference) and 'lines' (legacy frontend)
-        line_count = 50
-
-        val_n = request.query.get("n")
-        val_lines = request.query.get("lines")
-
-        target_val = val_n if val_n is not None else val_lines
-
-        if target_val:
-            try:
-                line_count = int(target_val)
-            except ValueError:
-                pass
-
-        # Cap at 500
-        line_count = min(max(line_count, 1), 500)
-
-        # R31: Filter parameters
-        trace_id_filter = request.query.get("trace_id")
-        prompt_id_filter = request.query.get("prompt_id")
-
-        content = tail_log(LOG_FILE, line_count)
-
-        # R31: Apply filtering if requested
-        if trace_id_filter or prompt_id_filter:
-            filtered_content = []
-            for line in content:
-                # Simple substring match (case-sensitive for IDs)
-                if trace_id_filter and trace_id_filter in line:
-                    filtered_content.append(line)
-                elif prompt_id_filter and prompt_id_filter in line:
-                    filtered_content.append(line)
-            content = filtered_content
-
-        # S24: Apply redaction to each line
-        if redact_text:
-            content = [redact_text(line) for line in content]
-
-        # R31: Enforce max bytes limit (100KB total)
-        MAX_BYTES = 100_000
-        total_bytes = sum(len(line.encode("utf-8")) for line in content)
-        if total_bytes > MAX_BYTES:
-            # Truncate from end to stay under limit
-            truncated = []
-            current_bytes = 0
-            for line in reversed(content):
-                line_bytes = len(line.encode("utf-8"))
-                if current_bytes + line_bytes > MAX_BYTES:
-                    break
-                truncated.insert(0, line)
-                current_bytes += line_bytes
-            content = truncated
-
-        return web.json_response(
-            {
-                "ok": True,
-                "content": content,
-                "filtered": bool(trace_id_filter or prompt_id_filter),
-            }
-        )
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)}, status=500)
+    # CRITICAL: logs_tail_response performs require_admin_token( before log access.
+    return await logs_tail_response(request, _handler_dependencies())
 
 
 @endpoint_metadata(
@@ -690,101 +527,8 @@ async def jobs_handler(request: web.Request) -> web.Response:
     GET /openclaw/jobs (legacy: /moltbot/jobs).
     This handler preserves the authorization and tenant boundary around the read model.
     """
-    if web is None:
-        raise RuntimeError("aiohttp not available")
-
-    token_info = resolve_token_info(request)
-
-    if not check_rate_limit(request, "admin"):
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="rate_limit",
-            status_code=429,
-            reason="jobs_rate_limited",
-        )
-        return build_rate_limit_response(
-            request,
-            "admin",
-            web_module=web,
-            error="jobs_rate_limited",
-            include_ok=True,
-        )
-
-    # CRITICAL: endpoint metadata is descriptive; this explicit guard is the
-    # runtime boundary that must remain before any queue/history access.
-    allowed, _error = require_admin_token(request)
-    if not allowed:
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="deny",
-            status_code=403,
-            reason="jobs_admin_required",
-        )
-        return web.json_response(
-            {"ok": False, "error": "jobs_admin_required"}, status=403
-        )
-
-    try:
-        with jobs_request_tenant_scope(request, token_info) as tenant_context:
-            query = normalize_jobs_query(request.query)
-            body = read_jobs(query, tenant_id=tenant_context.tenant_id)
-            scan = body["scan"]
-            _emit_jobs_list_audit(
-                request=request,
-                token_info=token_info,
-                outcome="allow",
-                status_code=200,
-                reason="jobs_listed",
-                returned_count=len(body["jobs"]),
-                excluded_count=scan["excluded"],
-                malformed_count=scan["malformed"],
-            )
-    except TenantBoundaryError as exc:
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="deny",
-            status_code=403,
-            reason=exc.code,
-        )
-        return web.json_response({"ok": False, "error": exc.code}, status=403)
-    except JobsSecurityError:
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="error",
-            status_code=400,
-            reason="jobs_query_invalid",
-        )
-        return web.json_response(
-            {"ok": False, "error": "jobs_query_invalid"}, status=400
-        )
-    except JobsHostContractUnsupported:
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="unsupported",
-            status_code=501,
-            reason="jobs_host_contract_unsupported",
-        )
-        return web.json_response(
-            {"ok": False, "error": "jobs_host_contract_unsupported"}, status=501
-        )
-    except JobsBackendUnavailable:
-        _emit_jobs_list_audit(
-            request=request,
-            token_info=token_info,
-            outcome="error",
-            status_code=503,
-            reason="jobs_backend_unavailable",
-        )
-        return web.json_response(
-            {"ok": False, "error": "jobs_backend_unavailable"}, status=503
-        )
-
-    return web.json_response(body)
+    # CRITICAL: jobs_response performs require_admin_token( before queue/history access.
+    return await jobs_response(request, _handler_dependencies())
 
 
 def _emit_jobs_list_audit(
@@ -796,17 +540,16 @@ def _emit_jobs_list_audit(
     reason: str,
     **counts,
 ) -> None:
-    """Emit only content-free jobs audit dimensions."""
+    """Preserve the established facade seam with content-free dependency capture."""
 
-    safe_outcome = outcome if outcome in SAFE_JOB_AUDIT_OUTCOMES else "error"
-    emit_audit_event(
-        action="jobs.list",
-        target="jobs",
-        outcome=safe_outcome,
-        token_info=token_info,
-        status_code=status_code,
-        details=build_jobs_audit_details(reason, **counts),
+    emit_jobs_list_audit(
+        _handler_dependencies(),
         request=request,
+        token_info=token_info,
+        outcome=outcome,
+        status_code=status_code,
+        reason=reason,
+        **counts,
     )
 
 
@@ -820,52 +563,8 @@ def _emit_jobs_list_audit(
 )
 async def trace_handler(request: web.Request) -> web.Response:
     """GET /moltbot/trace/{prompt_id} - Returns trace_id and redacted timeline."""
-    if web is None:
-        raise RuntimeError("aiohttp not available")
-    ok, init_error = _ensure_observability_deps_ready()
-    if not ok:
-        return web.json_response({"ok": False, "error": init_error}, status=500)
-    # S34: Trace/Log data is high sensitivity -> Require Admin Token
-    allowed, error = require_admin_token(request)
-    if not allowed:
-        return web.json_response({"ok": False, "error": error}, status=403)
-
-    prompt_id = request.match_info.get("prompt_id")
-    if not prompt_id:
-        return web.json_response(
-            {"ok": False, "error": "missing_prompt_id"}, status=400
-        )
-
-    rec = trace_store.get(prompt_id)
-    if not rec:
-        return web.json_response({"ok": False, "error": "not_found"}, status=404)
-
-    # S24: Apply redaction to trace data
-    trace_data = rec.to_dict()
-    try:
-        from ..services.reasoning_redaction import (
-            audit_reasoning_reveal,
-            resolve_reasoning_reveal,
-            sanitize_operator_payload,
-        )
-        from ..services.redaction import redact_json
-    except ImportError:
-        from services.reasoning_redaction import (  # type: ignore
-            audit_reasoning_reveal,
-            resolve_reasoning_reveal,
-            sanitize_operator_payload,
-        )
-        from services.redaction import redact_json
-
-    if redact_json:
-        trace_data = redact_json(trace_data)
-    reveal = resolve_reasoning_reveal(request, admin_authorized=allowed)
-    audit_reasoning_reveal(request, target="trace.get", decision=reveal)
-    trace_data = sanitize_operator_payload(
-        trace_data, include_reasoning=reveal["allowed"]
-    )
-
-    return web.json_response({"ok": True, "trace": trace_data})
+    # CRITICAL: trace_response performs require_admin_token( before trace access.
+    return await trace_response(request, _handler_dependencies())
 
 
 assist = None
@@ -884,78 +583,13 @@ def register_dual_route(server, method: str, path: str, handler) -> None:
     and directly to the aiohttp router with and without /api prefix
     to ensure robustness against loading order (R26/F24).
     """
-    # IMPORTANT: handler MUST be callable. If imports fail, handlers remain None.
-    # Registering a None handler crashes ComfyUI at startup (aiohttp assertion).
-    if not callable(handler):
-        print(
-            f"[OpenClaw] Warning: Skipping route {method} {path} because handler is missing (None)."
-        )
-        return
-    # Phase 3 Deprecation wrapper for legacy paths
-    actual_handler = handler
-    if path.startswith("/moltbot"):
-        from functools import wraps
-
-        @wraps(handler)
-        async def _deprecated_handler(request: web.Request) -> web.Response:
-            try:
-                # Assuming `metrics` is available in scope (from module level imports)
-                if metrics:
-                    metrics.inc("legacy_api_hits")
-            except Exception:
-                pass
-            print(
-                f"[OpenClaw] DEPRECATION WARNING: Legacy route accessed: {request.path}. Please migrate to /openclaw/* equivalents."
-            )
-            response = await handler(request)
-            if build_legacy_route_deprecation_headers:
-                headers = build_legacy_route_deprecation_headers(
-                    getattr(request, "path", path)
-                )
-                response_headers = getattr(response, "headers", None)
-                if headers and hasattr(response_headers, "update"):
-                    response_headers.update(headers)
-            return response
-
-        actual_handler = _deprecated_handler
-
-    # 1. Standard ComfyUI registration
-    if method == "GET":
-        server.routes.get(path)(actual_handler)
-    elif method == "POST":
-        server.routes.post(path)(actual_handler)
-    elif method == "PUT":
-        server.routes.put(path)(actual_handler)
-    elif method == "DELETE":
-        server.routes.delete(path)(actual_handler)
-
-    # 2. Hardened direct registration
-    if hasattr(server, "app") and hasattr(server.app, "router"):
-        # We try to register /api/... and legacy /... explicitly
-        # This fixes 404s if the extension loads after ComfyUI has compiled routes
-        targets = [path, "/api" + path]
-        for t in targets:
-            try:
-                # IMPORTANT: fallback routes must use the same wrapper as PromptServer.
-                # Registering the raw legacy handler bypasses deprecation telemetry/headers.
-                server.app.router.add_route(method, t, actual_handler)
-            except RuntimeError:
-                # Route likely exists (e.g. added by step 1 or duplicate)
-                pass
-            except Exception as e:
-                print(f"[OpenClaw] Warning: Failed to register fallback route {t}: {e}")
-
-
-def _is_openclaw_managed_path(path: str) -> bool:
-    if not isinstance(path, str):
-        return False
-    return (
-        path.startswith("/openclaw")
-        or path.startswith("/moltbot")
-        or path.startswith("/api/openclaw")
-        or path.startswith("/api/moltbot")
-        or path.startswith("/bridge")
-        or path.startswith("/api/bridge")
+    orchestrate_dual_route(
+        server,
+        method,
+        path,
+        handler,
+        metrics=metrics,
+        legacy_headers_builder=build_legacy_route_deprecation_headers,
     )
 
 
@@ -981,39 +615,7 @@ def _resolve_mae_profile() -> str:
 
 
 def _run_mae_startup_gate(server) -> None:
-    if not hasattr(server, "app"):
-        return
-
-    try:
-        if __package__ and "." in __package__:
-            from ..services.endpoint_manifest import (
-                generate_manifest,
-                validate_mae_posture,
-            )
-        else:
-            from services.endpoint_manifest import (
-                generate_manifest,
-                validate_mae_posture,
-            )
-    except Exception as e:
-        print(f"[OpenClaw] Warning: S60 MAE gate unavailable: {e}")
-        return
-
-    mae_profile = _resolve_mae_profile()
-    manifest = generate_manifest(server.app)
-    scoped_manifest = [
-        entry for entry in manifest if _is_openclaw_managed_path(entry.get("path", ""))
-    ]
-    ok, violations = validate_mae_posture(scoped_manifest, profile=mae_profile)
-    if ok:
-        return
-
-    message = "S60 MAE posture validation failed:\n" + "\n".join(
-        f"- {item}" for item in violations
-    )
-    if mae_profile in {"public", "hardened"}:
-        raise RuntimeError(message)
-    print(f"[OpenClaw] Warning: {message}")
+    run_mae_startup_gate(server, _resolve_mae_profile)
 
 
 def register_routes(server) -> None:
@@ -1036,7 +638,6 @@ def register_routes(server) -> None:
         raise
 
     print("[OpenClaw] Registering routes (Shim Alignment R26)...")
-    prefixes = ["/openclaw", "/moltbot"]  # new, legacy
     core_handlers = {
         "remote_admin_page_handler": remote_admin_page_handler,
         "health_handler": health_handler,
@@ -1090,95 +691,27 @@ def register_routes(server) -> None:
         "select_apply_winner_handler": select_apply_winner_handler,
     }
 
-    # Core Observability & Config
-    for prefix in prefixes:
-        register_route_family(
-            server,
-            register_dual_route,
-            build_core_route_specs(prefix, core_handlers),
-        )
-
-    # F8/F21 Assist Routes
-    # R84 Boot Boundary: CORE (Planner/Refiner part of core/assist)
-    if assist:
-        for prefix in prefixes:
-            register_route_family(
-                server,
-                register_dual_route,
-                build_assist_route_specs(prefix, assist),
-            )
-
-    # R126: Connector installation diagnostics/read APIs
+    connector_handlers = None
     if connector_installations_list_handler:
-        connector_installation_handlers = {
+        connector_handlers = {
             "connector_installations_list_handler": connector_installations_list_handler,
             "connector_extraction_contract_handler": connector_extraction_contract_handler,
             "connector_installation_resolve_handler": connector_installation_resolve_handler,
             "connector_installation_audit_handler": connector_installation_audit_handler,
             "connector_installation_get_handler": connector_installation_get_handler,
         }
-        for prefix in prefixes:
-            register_route_family(
-                server,
-                register_dual_route,
-                build_connector_installation_route_specs(
-                    prefix, connector_installation_handlers
-                ),
-            )
-
-    # F10 Bridge Routes (Sidecar)
-    # R84 Boot Boundary: BRIDGE
-    # F10 Bridge Routes (Sidecar)
-    # R84 Boot Boundary: BRIDGE
-    try:
-        try:
-            from ..api.bridge import register_bridge_routes
-            from ..services.modules import ModuleCapability, is_module_enabled
-        except (ImportError, ValueError):
-            from api.bridge import register_bridge_routes
-            from services.modules import ModuleCapability, is_module_enabled
-
-        if hasattr(server, "app") and is_module_enabled(ModuleCapability.BRIDGE):
-            register_bridge_routes(server.app)
-            print("[OpenClaw] Bridge routes registered")
-        elif not is_module_enabled(ModuleCapability.BRIDGE):
-            print("[OpenClaw] Bridge module disabled; skipping route registration")
-    except ImportError:
-        pass
-
-    _run_mae_startup_gate(server)
-
-    # S8/S23/F11 Asset Packs
-    # R84 Boot Boundary: REGISTRY_SYNC (Packs management)
-    try:
-        try:
-            from ..api.packs import PacksHandlers
-            from ..services.modules import ModuleCapability, is_module_enabled
-        except (ImportError, ValueError):
-            from api.packs import PacksHandlers
-            from services.modules import ModuleCapability, is_module_enabled
-
-        # Packs are currently treated as part of CORE or REGISTRY_SYNC depending on strictness.
-        # For now, we bind them to REGISTRY_SYNC if we want to segment them,
-        # but realistically they are often core local features.
-        # Let's check REGISTRY_SYNC for import/export features specifically if we wanted to split,
-        # but keeping them enabled by default for now unless R84 explicitly segments them.
-        # DESIGN DECISION: Packs are local core features. Registry sync is remote.
-        # We will keep basic pack routes, but R84 might control remote interactions later.
-
-        try:
-            from ..config import DATA_DIR
-        except (ImportError, ValueError):
-            from config import DATA_DIR
-
-        packs = PacksHandlers(DATA_DIR)
-
-        for prefix in prefixes:
-            register_route_family(
-                server,
-                register_dual_route,
-                build_pack_route_specs(prefix, packs),
-            )
-
-    except ImportError:
-        pass
+    register_route_families(
+        server,
+        RouteRegistrationDependencies(
+            build_core_route_specs=build_core_route_specs,
+            build_assist_route_specs=build_assist_route_specs,
+            build_connector_installation_route_specs=build_connector_installation_route_specs,
+            build_pack_route_specs=build_pack_route_specs,
+            register_route_family=register_route_family,
+            register_dual_route=register_dual_route,
+            core_handlers=core_handlers,
+            assist=assist,
+            connector_installation_handlers=connector_handlers,
+            run_mae_startup_gate=_run_mae_startup_gate,
+        ),
+    )

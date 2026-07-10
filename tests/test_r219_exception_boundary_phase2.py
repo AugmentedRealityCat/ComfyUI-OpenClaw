@@ -34,7 +34,8 @@ class TestPolicyV2(unittest.TestCase):
         self.assertEqual(
             set(policy["selected_modules"]),
             {
-                "api/routes.py",
+                "api/route_handlers.py",
+                "api/route_orchestration.py",
                 "connector/router.py",
                 "services/route_bootstrap.py",
                 "api/config.py",
@@ -59,7 +60,7 @@ class TestPolicyV2(unittest.TestCase):
 
         policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
         expired = copy.deepcopy(policy)
-        first = expired["selected_modules"]["api/routes.py"]["broad_catches"][0]
+        first = expired["selected_modules"]["api/route_handlers.py"]["broad_catches"][0]
         first["review_after"] = "2020-01-01"
         self.assertTrue(
             any(
@@ -69,9 +70,9 @@ class TestPolicyV2(unittest.TestCase):
         )
 
         missing_owner = copy.deepcopy(policy)
-        del missing_owner["selected_modules"]["api/routes.py"]["broad_catches"][0][
-            "regression_owner"
-        ]
+        del missing_owner["selected_modules"]["api/route_handlers.py"]["broad_catches"][
+            0
+        ]["regression_owner"]
         self.assertTrue(
             any(
                 "regression_owner" in item
@@ -80,9 +81,9 @@ class TestPolicyV2(unittest.TestCase):
         )
 
         missing_owner_file = copy.deepcopy(policy)
-        missing_owner_file["selected_modules"]["api/routes.py"]["broad_catches"][0][
-            "regression_owner"
-        ] = "tests/does_not_exist.py"
+        missing_owner_file["selected_modules"]["api/route_handlers.py"][
+            "broad_catches"
+        ][0]["regression_owner"] = "tests/does_not_exist.py"
         self.assertTrue(
             any(
                 "does not exist" in item
@@ -127,7 +128,7 @@ class TestPolicyV2(unittest.TestCase):
 
         policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
         unknown_entry = copy.deepcopy(policy)
-        unknown_entry["selected_modules"]["api/routes.py"]["broad_catches"][0][
+        unknown_entry["selected_modules"]["api/route_handlers.py"]["broad_catches"][0][
             "unexpected"
         ] = True
         self.assertTrue(
@@ -140,7 +141,7 @@ class TestPolicyV2(unittest.TestCase):
         unsafe_path = copy.deepcopy(policy)
         unsafe_path["selected_modules"]["../outside.py"] = unsafe_path[
             "selected_modules"
-        ].pop("api/routes.py")
+        ].pop("api/route_handlers.py")
         self.assertTrue(
             any(
                 "unsafe selected module path" in item

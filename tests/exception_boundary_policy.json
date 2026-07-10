@@ -1,11 +1,11 @@
 {
   "version": 2,
   "selected_modules": {
-    "api/routes.py": {
+    "api/route_handlers.py": {
       "coverage": "all_broad_catches",
       "broad_catches": [
         {
-          "scope": "health_handler",
+          "scope": "health_response",
           "expected_count": 6,
           "classification": "allowed_boundary_guard",
           "reason": "Health diagnostics degrade to partial snapshots when optional probes fail.",
@@ -13,13 +13,18 @@
           "review_after": "2027-01-11"
         },
         {
-          "scope": "logs_tail_handler",
+          "scope": "logs_tail_response",
           "expected_count": 1,
           "classification": "allowed_boundary_guard",
           "reason": "Log-tail diagnostics return a bounded failure instead of crashing route handling.",
           "regression_owner": "tests/test_r117_observability_redaction_endpoints.py",
           "review_after": "2027-01-11"
-        },
+        }
+      ]
+    },
+    "api/route_orchestration.py": {
+      "coverage": "all_broad_catches",
+      "broad_catches": [
         {
           "scope": "register_dual_route._deprecated_handler",
           "expected_count": 1,
@@ -37,7 +42,7 @@
           "review_after": "2027-01-11"
         },
         {
-          "scope": "_run_mae_startup_gate",
+          "scope": "run_mae_startup_gate",
           "expected_count": 1,
           "classification": "allowed_boundary_guard",
           "reason": "MAE import availability is an optional startup diagnostic boundary.",

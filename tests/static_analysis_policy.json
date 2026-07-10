@@ -290,65 +290,9 @@
     {
       "tool": "mypy",
       "path": "api/routes.py",
-      "code": "misc",
-      "message": "\"None\" not callable",
-      "count": 13
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "misc",
-      "message": "Exception type must be derived from BaseException (or be a tuple of exception classes)",
-      "count": 4
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "operator",
-      "message": "Unsupported operand types for - (\"float\" and \"None\")",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "operator",
-      "message": "Unsupported right operand type for in (\"Any | None\")",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "union-attr",
-      "message": "Item \"None\" of \"Any | None\" has no attribute \"get\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "union-attr",
-      "message": "Item \"None\" of \"Any | None\" has no attribute \"get_snapshot\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "union-attr",
-      "message": "Item \"None\" of \"Any | None\" has no attribute \"update\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
       "code": "unused-ignore",
       "message": "Unused \"type: ignore\" comment",
-      "count": 33
-    },
-    {
-      "tool": "mypy",
-      "path": "api/routes.py",
-      "code": "var-annotated",
-      "message": "Need type annotation for \"truncated\" (hint: \"truncated: list[<type>] = ...\")",
-      "count": 1
+      "count": 32
     },
     {
       "tool": "mypy",
@@ -2763,48 +2707,6 @@
       "path": "api/route_registrars.py",
       "code": "UP035",
       "message": "Import from `collections.abc` instead: `Iterable`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "F401",
-      "message": "`json` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "F401",
-      "message": "`services.access_control.is_loopback` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "F401",
-      "message": "`sys` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "N806",
-      "message": "Variable `MAX_BYTES` in function should be lowercase",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "SIM105",
-      "message": "Use `contextlib.suppress(ValueError)` instead of `try`-`except`-`pass`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/routes.py",
-      "code": "SIM114",
-      "message": "Combine `if` branches using logical `or` operator",
       "count": 1
     },
     {
