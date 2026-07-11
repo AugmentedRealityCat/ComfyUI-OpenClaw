@@ -289,7 +289,7 @@ class TestR79EgressCompliance(unittest.TestCase):
             # IMPORTANT: Keep connector platform adapters in parity here.
             # Missing a newly-added adapter causes false-positive R79 failures
             # in full-gate runs even when egress behavior is intentional.
-            "connector/platforms/slack_webhook.py",
+            "connector/platforms/slack_delivery_handlers.py",
             "connector/platforms/slack_socket_mode.py",
             # Providers
             "services/providers/anthropic.py",

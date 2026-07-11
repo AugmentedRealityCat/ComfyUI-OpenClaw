@@ -42,8 +42,9 @@ class TestPolicyV2(unittest.TestCase):
                 "services/route_bootstrap.py",
                 "api/config_projection_handlers.py",
                 "api/config_llm_handlers.py",
-                "connector/platforms/slack_webhook.py",
-                "connector/platforms/feishu_webhook.py",
+                "connector/platforms/slack_installation_handlers.py",
+                "connector/platforms/slack_ingress_handlers.py",
+                "connector/platforms/feishu_ingress_handlers.py",
             },
         )
         for module in policy["selected_modules"].values():

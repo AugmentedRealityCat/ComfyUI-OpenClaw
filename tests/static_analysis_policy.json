@@ -661,20 +661,6 @@
     {
       "tool": "mypy",
       "path": "connector/platforms/feishu_webhook.py",
-      "code": "index",
-      "message": "Value of type \"Any | None\" is not indexable",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "connector/platforms/feishu_webhook.py",
-      "code": "name-defined",
-      "message": "Name \"InstallationResolution\" is not defined",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "connector/platforms/feishu_webhook.py",
       "code": "unused-ignore",
       "message": "Unused \"type: ignore\" comment",
       "count": 4
@@ -754,13 +740,6 @@
       "path": "connector/platforms/slack_socket_mode.py",
       "code": "no-any-return",
       "message": "Returning Any from function declared to return \"str | None\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "connector/platforms/slack_webhook.py",
-      "code": "arg-type",
-      "message": "Argument 1 to \"_is_admin\" of \"RouterDispatchMixin\" has incompatible type \"CommandRequest\"; expected \"str\"",
       "count": 1
     },
     {
@@ -3181,30 +3160,16 @@
     {
       "tool": "ruff",
       "path": "connector/platforms/feishu_webhook.py",
-      "code": "F401",
-      "message": "`asyncio` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/feishu_webhook.py",
-      "code": "F821",
-      "message": "Undefined name `InstallationResolution`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/feishu_webhook.py",
       "code": "UP006",
       "message": "Use `dict` instead of `Dict` for type annotation",
-      "count": 34
+      "count": 12
     },
     {
       "tool": "ruff",
       "path": "connector/platforms/feishu_webhook.py",
       "code": "UP006",
       "message": "Use `tuple` instead of `Tuple` for type annotation",
-      "count": 4
+      "count": 1
     },
     {
       "tool": "ruff",
@@ -3232,7 +3197,7 @@
       "path": "connector/platforms/feishu_webhook.py",
       "code": "UP045",
       "message": "Use `X | None` for type annotations",
-      "count": 12
+      "count": 2
     },
     {
       "tool": "ruff",
@@ -3342,37 +3307,9 @@
     {
       "tool": "ruff",
       "path": "connector/platforms/slack_webhook.py",
-      "code": "F401",
-      "message": "`..contract.CommandResponse` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/slack_webhook.py",
-      "code": "SIM102",
-      "message": "Use a single `if` statement instead of nested `if` statements",
-      "count": 2
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/slack_webhook.py",
-      "code": "SIM117",
-      "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
-      "count": 3
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/slack_webhook.py",
       "code": "UP006",
       "message": "Use `dict` instead of `Dict` for type annotation",
-      "count": 18
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/slack_webhook.py",
-      "code": "UP006",
-      "message": "Use `tuple` instead of `Tuple` for type annotation",
-      "count": 1
+      "count": 2
     },
     {
       "tool": "ruff",
@@ -3384,16 +3321,9 @@
     {
       "tool": "ruff",
       "path": "connector/platforms/slack_webhook.py",
-      "code": "UP035",
-      "message": "`typing.Tuple` is deprecated, use `tuple` instead",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/platforms/slack_webhook.py",
       "code": "UP045",
       "message": "Use `X | None` for type annotations",
-      "count": 11
+      "count": 2
     },
     {
       "tool": "ruff",
