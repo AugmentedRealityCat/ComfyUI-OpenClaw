@@ -166,7 +166,7 @@
   ],
   "schema_version": 1,
   "upstream_contract_digests": {
-    "api_config_contract_r221.json": "496063d3a838c5cfa884952215049054cdf6ff030c98a5b02802ae7f64f2d57e",
-    "api_route_contract_r220.json": "17c804dc80f35ddf774e5a941ab4fd4404f55f1e37a8cafd3b3a9238a5e12c9e"
+    "api_config_contract_r221.json": "a0a4aec0ba68692bf8bfac411fb951f95589006ba3d5d6ad463569d24dfc1245",
+    "api_route_contract_r220.json": "947979f978f3541dce6b005c38255177322234a24b47ee0dd22a49e234eeed27"
   }
 }

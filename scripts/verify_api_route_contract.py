@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import inspect
 import json
 import sys
@@ -14,6 +13,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from scripts.contract_digest import stable_text_digest, write_text_lf  # noqa: E402
 
 CONTRACT_PATH = ROOT / "tests" / "api_route_contract_r220.json"
 
@@ -122,7 +123,6 @@ def build_contract() -> dict[str, Any]:
             "trace_handler",
         )
     }
-    openapi_bytes = (ROOT / "docs" / "openapi.yaml").read_bytes()
     return {
         "schema_version": 1,
         "registration_order": [
@@ -149,7 +149,7 @@ def build_contract() -> dict[str, Any]:
         "families": families,
         "facade_signatures": facade,
         "facade_metadata": metadata,
-        "openapi_sha256": hashlib.sha256(openapi_bytes).hexdigest(),
+        "openapi_sha256": stable_text_digest(ROOT / "docs" / "openapi.yaml"),
     }
 
 
@@ -163,7 +163,7 @@ def main() -> int:
     args = parser.parse_args()
     actual = build_contract()
     if args.write_baseline:
-        CONTRACT_PATH.write_text(_canonical_json(actual), encoding="utf-8")
+        write_text_lf(CONTRACT_PATH, _canonical_json(actual))
         print(f"API-ROUTE-CONTRACT-WRITTEN: {CONTRACT_PATH}")
         return 0
     expected = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))

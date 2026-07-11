@@ -90,7 +90,7 @@
     "tests.test_f74_reply_visibility_policy",
     "tests.security.test_s80_connector_ingress"
   ],
-  "router_contract_digest": "78360537c9129f1671d1c62b663b1ea8a53d5b29fe067e2d73ab7c6bad5824aa",
+  "router_contract_digest": "1ba1ba79dba58571f120a244923ef957ce367ddde44f74d690611f6306a6dde7",
   "schema_version": 1,
   "slack": {
     "class_constants": {

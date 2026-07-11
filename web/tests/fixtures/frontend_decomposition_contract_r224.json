@@ -173,8 +173,8 @@
     ]
   },
   "upstream_contract_digests": {
-    "tests/api_route_contract_r220.json": "17c804dc80f35ddf774e5a941ab4fd4404f55f1e37a8cafd3b3a9238a5e12c9e",
-    "tests/api_config_contract_r221.json": "496063d3a838c5cfa884952215049054cdf6ff030c98a5b02802ae7f64f2d57e",
-    "tests/platform_adapter_contract_r223.json": "a23402432a51a57ad13a5de777f3c34b6d58743179524c09a90b004f98f3dd2c"
+    "tests/api_route_contract_r220.json": "947979f978f3541dce6b005c38255177322234a24b47ee0dd22a49e234eeed27",
+    "tests/api_config_contract_r221.json": "a0a4aec0ba68692bf8bfac411fb951f95589006ba3d5d6ad463569d24dfc1245",
+    "tests/platform_adapter_contract_r223.json": "fb72a77ad8b0ce693c27b34d757f5d47d5be0ebcdd39732c34a1ee535f899b6a"
   }
 }

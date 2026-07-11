@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import inspect
 import json
 import sys
@@ -15,6 +14,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from scripts.contract_digest import stable_text_digest, write_text_lf  # noqa: E402
+
 CONTRACT_PATH = ROOT / "tests" / "connector_router_contract_r222.json"
 
 
@@ -75,7 +77,7 @@ def build_contract() -> dict[str, Any]:
         "api_route_contract_r220.json",
     ):
         path = ROOT / "tests" / filename
-        digests[filename] = hashlib.sha256(path.read_bytes()).hexdigest()
+        digests[filename] = stable_text_digest(path)
     return {
         "schema_version": 1,
         "constructor_signature": str(inspect.signature(CommandRouter)),
@@ -116,7 +118,7 @@ def main() -> int:
     args = parser.parse_args()
     actual = build_contract()
     if args.write_baseline:
-        CONTRACT_PATH.write_text(_canonical_json(actual), encoding="utf-8")
+        write_text_lf(CONTRACT_PATH, _canonical_json(actual))
         print(f"CONNECTOR-ROUTER-CONTRACT-WRITTEN: {CONTRACT_PATH}")
         return 0
     expected = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))

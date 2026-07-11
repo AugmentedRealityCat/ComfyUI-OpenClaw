@@ -1,9 +1,9 @@
 /** Verify the frozen R224 Settings/API frontend contract. */
 
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stableTextDigest } from "./contract_digest.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONTRACT_PATH = path.join(ROOT, "web", "tests", "fixtures", "frontend_decomposition_contract_r224.json");
@@ -42,7 +42,7 @@ function methodSignatures(source) {
 }
 
 function digest(relativePath) {
-    return crypto.createHash("sha256").update(fs.readFileSync(path.join(ROOT, relativePath))).digest("hex");
+    return stableTextDigest(path.join(ROOT, relativePath));
 }
 
 export function buildContract() {
