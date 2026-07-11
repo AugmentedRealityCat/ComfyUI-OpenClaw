@@ -4356,27 +4356,6 @@
     },
     {
       "tool": "ruff",
-      "path": "scripts/sync_split.py",
-      "code": "C416",
-      "message": "Unnecessary dict comprehension (rewrite using `dict()`)",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "scripts/sync_split.py",
-      "code": "I001",
-      "message": "Import block is un-sorted or un-formatted",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "scripts/sync_split.py",
-      "code": "UP035",
-      "message": "Import from `collections.abc` instead: `Iterable`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
       "path": "scripts/verify_exception_boundary_policy.py",
       "code": "UP035",
       "message": "Import from `collections.abc` instead: `Iterable`",

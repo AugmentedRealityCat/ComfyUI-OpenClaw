@@ -89,10 +89,32 @@ def _excluded_path_values(policy: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
+def _tracked_python_files(repo_root: Path) -> frozenset[str] | None:
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--", "*.py"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        shell=False,
+    )
+    if result.returncode != 0:
+        return None
+    # IMPORTANT: governance ownership must not include ignored maintainer-local files.
+    return frozenset(
+        line.strip().replace("\\", "/")
+        for line in result.stdout.splitlines()
+        if line.strip()
+    )
+
+
 def discover_owned_python_files(
     repo_root: Path, policy: Mapping[str, Any]
 ) -> tuple[str, ...]:
     excluded = _excluded_path_values(policy)
+    tracked_files = _tracked_python_files(repo_root)
     discovered: set[str] = set()
     for root_value in policy.get("production_roots", []):
         root_path = repo_root / str(root_value)
@@ -105,6 +127,8 @@ def discover_owned_python_files(
             continue
         for candidate in candidates:
             relative = _repo_relative_path(candidate, repo_root)
+            if tracked_files is not None and relative not in tracked_files:
+                continue
             if any(_path_within(relative, excluded_path) for excluded_path in excluded):
                 continue
             discovered.add(relative)

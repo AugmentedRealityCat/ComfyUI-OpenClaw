@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -75,6 +76,48 @@ class TestStaticAnalysisPolicy(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._create_repo(root)
+
+            files = policy_module.discover_owned_python_files(root, self._policy())
+
+        self.assertEqual(
+            files,
+            (
+                "config.py",
+                "pkg/clean.py",
+                "pkg/nested/child.py",
+                "pkg/owned.py",
+            ),
+        )
+
+    def test_git_worktree_discovery_excludes_ignored_and_untracked_python(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._create_repo(root)
+            (root / ".gitignore").write_text("pkg/local_ignored.py\n", encoding="utf-8")
+            (root / "pkg" / "local_ignored.py").write_text(
+                "IGNORED = True\n", encoding="utf-8"
+            )
+            (root / "pkg" / "local_untracked.py").write_text(
+                "UNTRACKED = True\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "init", "--quiet"], cwd=root, check=True, capture_output=True
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "add",
+                    ".gitignore",
+                    "config.py",
+                    "pkg/owned.py",
+                    "pkg/clean.py",
+                    "pkg/generated.py",
+                    "pkg/nested/child.py",
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
 
             files = policy_module.discover_owned_python_files(root, self._policy())
 
