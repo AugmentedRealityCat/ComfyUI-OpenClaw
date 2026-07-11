@@ -14,7 +14,7 @@ Closure note:
 - this intake reference is now historical context only
 - the residual wave was closed during `S91`, with GitHub `Code scanning` and `Secret scanning` reduced to `0` open findings on 2026-04-08
 
-## 2. Current Residual Findings Baseline
+## 2. Intake Residual Findings Baseline
 
 Authenticated GitHub Security review showed this residual baseline at intake:
 
@@ -25,25 +25,25 @@ Authenticated GitHub Security review showed this residual baseline at intake:
 Residual CodeQL families at intake:
 
 1. `py/path-injection`
-   - current concentration: `services/model_manager_transfer.py`
+   - intake concentration: `services/model_manager_transfer.py`
    - count at intake: `9`
 2. `py/weak-sensitive-data-hashing`
-   - current concentration: `services/redaction.py`, `services/audit.py`, `services/bridge_token_lifecycle.py`
+   - intake concentration: `services/redaction.py`, `services/audit.py`, `services/bridge_token_lifecycle.py`
    - count at intake: `3`
 3. `py/stack-trace-exposure`
-   - current concentration: `connector/platforms/slack_webhook.py`, `connector/platforms/feishu_webhook.py`
+   - intake concentration: `connector/platforms/slack_webhook.py`, `connector/platforms/feishu_webhook.py`
    - count at intake: `2`
 4. `py/clear-text-logging-sensitive-data`
-   - current concentration: `api/bridge.py`, `services/audit.py`
+   - intake concentration: `api/bridge.py`, `services/audit.py`
    - count at intake: `2`
 5. `py/clear-text-storage-sensitive-data`
-   - current concentration: `services/audit.py`
+   - intake concentration: `services/audit.py`
    - count at intake: `1`
 6. `py/xml-bomb`
-   - current concentration: `connector/platforms/wechat_webhook.py`
+   - intake concentration: `connector/platforms/wechat_webhook.py`
    - count at intake: `1`
 7. `js/incomplete-sanitization`
-   - current concentration: `tests/e2e/specs/notifications.spec.js`
+   - intake concentration: `tests/e2e/specs/notifications.spec.js`
    - count at intake: `1`
 
 Residual secret-scanning family:

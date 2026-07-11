@@ -11,8 +11,15 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 - Event/task polling: admin-console and model/task views consume deterministic delta metadata (`effective_since_seq`, `next_since_seq`, reset/truncation hints) instead of assuming every refresh is a full snapshot.
 - Notification center: `web/openclaw_notification_center.js` owns persistent in-app notification storage, dedupe, acknowledge, dismiss, and deep-link behavior.
 - Banner runtime: `web/openclaw_banner_manager.js` owns transient banner state and shell-facing banner transitions.
-- Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, and remount safety.
-- API: `web/openclaw_api.js` provides a normalized fetch wrapper and OpenClaw endpoints (legacy Moltbot endpoints still work).
+- Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, remount safety, and optional
+  pending-render disposal before switching panes.
+- API: `web/openclaw_api.js` owns normalized transport, session, timeout, retry, and singleton
+  behavior. Config, generation, resource, model, and event endpoint families live in focused
+  `web/openclaw_api_*.js` owner modules behind the same public API (legacy Moltbot endpoints still
+  work).
+- Settings: `web/tabs/settings_tab.js` composes status, LLM, secrets, logs, and DOM owner modules.
+  Its lifecycle owner invalidates stale async generations and clears scheduled work when the tab
+  is disposed, preventing late responses from mutating a remounted pane.
 - Host surface: `web/openclaw_host_surface.js` resolves the active frontend host surface and stamps explicit metadata so standalone frontend vs desktop-embedded behavior stays testable.
 - Output refs: `web/openclaw_asset_refs.js` normalizes classic history refs, optional `asset_hash`/`hash` refs when host metadata is present, and current previewable media groups (`images`, `video`, `audio`, `3d`, bounded inline or file-backed `text`) onto one media-aware contract. Allowlisted text files under the host `files` key stay on same-origin `/view` and use a 5-second, 64-KiB streaming, strict textual-MIME/UTF-8 reader with a 4,096-character display cap. HDR `.exr` / `.hdr` image refs show source-preview fallback links instead of normal thumbnails, text reaches the DOM only as literal text, and asset-service-only refs remain explicit fallback states instead of silently auto-fetching `/api/assets`.
 - Styles: `web/openclaw.css` provides shared design tokens and component classes.
@@ -21,6 +28,10 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 Refactor note:
 - `web/openclaw_ui.js` should stay focused on shell composition, shared singleton ownership, and exports.
 - New shell behaviors should prefer the extracted action/queue modules unless they truly belong to top-level shell assembly.
+- New API methods should be added to the matching route-family owner rather than growing the
+  transport facade; keep `openclawApi` as the only shared singleton.
+- New Settings behavior should stay in the matching status/LLM/secrets/logs/DOM owner and use the
+  shared generation lifecycle for delayed or asynchronous UI changes.
 - New tab markup should use canonical `openclaw-*` classes; legacy `moltbot-*` aliases are generated centrally at runtime instead of being duplicated in each template.
 - New host sidebar registration changes should stay in `web/openclaw_sidebar_registration.js` rather than duplicating ComfyUI frontend API detection inside the extension entrypoint.
 - Host-sensitive behaviors should consume the shared host-surface helper rather than inferring desktop vs standalone frontend from ad-hoc globals.
@@ -96,5 +107,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 - Harness: `tests/e2e/test-harness.html` (mocks ComfyUI core + basic OpenClaw API calls)
 - Harness bootstrap now retries one transient `openclaw.js` module-fetch failure before surfacing a hard load error, so CI-only first-request flakiness does not get misreported as a permanent sidebar failure.
 - Web helper/self-test harness: `web/tests/e2e-harness.html` (includes frontend helper and wrapper idempotence checks)
+- Frontend unit contracts also freeze API exports/signatures, singleton identity, Settings DOM
+  identities, owner direction, and stale-generation disposal across the decomposed modules.
 - Desktop host parity lane: `tests/e2e/specs/desktop_host_parity.spec.js` verifies standalone vs desktop host evidence separately and covers both sidebar and Remote Admin host-sensitive behavior under the shared harness shims.
 - When investigating suspected harness flakes locally, prefer `npm run test:stress -- <spec>` so the same shared bootstrap path is exercised repeatedly without changing the default `npm test` contract.

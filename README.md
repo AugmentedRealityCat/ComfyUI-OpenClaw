@@ -91,6 +91,24 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Maintainability, scale safeguards, and verification governance strengthened</strong></summary>
+
+- Added pinned incremental Ruff and Mypy enforcement that blocks new production-code debt in
+  local and CI validation without requiring an unsafe repository-wide rewrite.
+- Added deterministic scale baselines for large jobs history, connector summaries, and frontend
+  output normalization, with exact payload and call-count budgets plus advisory timing evidence.
+- Hardened selected exception boundaries so cancellation, compatibility fallback, status mapping,
+  and redacted diagnostics remain explicit instead of being swallowed by broad catches.
+- Split the largest API route/config, connector command, Slack/Feishu adapter, and frontend
+  Settings/API hotspots into focused owner modules while preserving public routes, patch seams,
+  security checks, DOM behavior, and host compatibility.
+- Promoted the governed backend coverage floor to 55% using consecutive release-cycle evidence,
+  all-hotspot regression ownership, atomic config checks, and fail-closed evidence validation.
+
+</details>
+
+<details>
+
 <summary><strong>Secure jobs visibility, host compatibility, output previews, and graph guards refreshed</strong></summary>
 
 - `GET /openclaw/jobs` now provides an Admin-only, versioned jobs view with bounded
@@ -146,26 +164,6 @@ Deployment profiles and hardening references:
 - Added Job Monitor support for allowlisted text files under the host `files` output key. Previews use same-origin `/view`, a 5-second timeout, strict textual MIME and UTF-8 checks, a 64-KiB streaming cap, a 4,096-character display cap, and literal text rendering; rejected or unsupported responses keep an explicit source link.
 - OpenClaw prompt submissions now include stable `comfy_usage_source` attribution when missing, without overwriting caller-provided attribution or copying prompt/tenant/trace content into that field.
 - Updated public release/support/troubleshooting docs to match the refreshed host facts and avoid exposing maintainer-only planning paths or machine-local links.
-
-</details>
-
-<details>
-
-<summary><strong>Supply-chain and CI hardening refreshed for dependency and release workflows</strong></summary>
-
-- CI and local validation now include a read-only supply-chain hardening check for known malicious package-family and persistence indicators.
-- Frontend dependency bootstrap paths use lockfile-driven `npm ci` in validation workflows.
-- Release and dependency-review workflows now have tighter permissions, pinned publish-action usage, and PR-time dependency review for dependency manifest changes.
-
-</details>
-
-<details>
-
-<summary><strong>Connector replay, reply visibility, and scheduled delivery behavior aligned with current chat workflows</strong></summary>
-
-- Connector event handling now distinguishes duplicate committed actions from retryable pre-delivery failures across supported chat adapters, reducing accidental re-execution while still allowing safe retries.
-- Reply visibility is now governed by a shared connector policy for direct messages, shared chats, threads, internal delivery, and tool-only contexts; suppressed text is logged as a successful no-op instead of a delivery failure.
-- Telegram topics, Slack threads/workspaces, and Feishu account/workspace context are preserved for immediate replies and delayed result or approval follow-up, while approval/action buttons remain visible.
 
 </details>
 
@@ -425,6 +423,10 @@ Current sidebar composition keeps `web/openclaw_ui.js` as the shell root and rou
 - queue polling and transient banners: `web/openclaw_queue_monitor.js` and `web/openclaw_banner_manager.js`
 - persistent operator notifications: `web/openclaw_notification_center.js`
 - tab registration/remount behavior: `web/openclaw_tabs.js`
+- API transport/session core: `web/openclaw_api.js`, with config, generation, resource, model,
+  and event route families owned by `web/openclaw_api_*.js` modules behind the same singleton
+- Settings composition and async generation lifecycle: `web/tabs/settings_tab.js`, with status,
+  LLM, secrets, logs, DOM, and lifecycle ownership in focused `settings_tab_*.js` modules
 - shared error + compatibility helpers: `web/openclaw_utils.js`
 
 New shell/tab wiring should use the shared text-safe DOM helpers in `web/openclaw_utils.js` instead of duplicating ad hoc element construction in individual tabs.
@@ -748,7 +750,9 @@ The SOP already defines:
 - the docs-only exception for strictly documentation/planning/SOP changes
 - one-command full test scripts for Windows and Linux/WSL
 - supply-chain hardening checks and lockfile-driven frontend dependency installation
-- the CI-parity backend coverage and governance workflow
+- pinned incremental Ruff/Mypy debt enforcement and deterministic scale regression baselines
+- the CI-parity backend coverage workflow with the governed 55% floor, retained release-cycle
+  evidence, and required hotspot ownership
 
 ## Updating
 

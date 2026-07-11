@@ -7,6 +7,28 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Maintainability, scale safeguards, and verification governance strengthened</strong></summary>
+
+- Added a pinned incremental Ruff/Mypy policy to local, pre-commit, and CI validation. Existing
+  debt remains explicitly governed while new production-path findings fail the gate.
+- Established deterministic scale baselines for 10,000-record jobs history, bounded connector
+  summaries, and 1,024 frontend output refs. Exact call counts, payload bounds, and stable digests
+  are enforced; host-sensitive elapsed time remains advisory.
+- Classified and hardened selected config, connector, and platform-adapter exception boundaries,
+  preserving cancellation, compatibility fallback, public status mapping, and redacted logging.
+- Decomposed API route and configuration ownership, connector command dispatch, Slack and Feishu
+  ingress/installation/delivery seams, and frontend API/Settings ownership behind stable facades.
+  Public routes, patch seams, security controls, singleton identity, DOM structure, and host
+  lifecycle behavior remain contract-tested.
+- Promoted the backend coverage floor from 45% to 55% only after reconstructing two consecutive
+  release snapshots, retaining full-suite artifact hashes and all required hotspot percentages,
+  and assigning targeted regression owners. Incomplete, nonconsecutive, malformed, or atomically
+  mismatched promotion evidence now fails closed.
+
+</details>
+
+<details>
+
 <summary><strong>Secure jobs visibility and connector summaries completed</strong></summary>
 
 - Replaced the placeholder jobs listing with an Admin-only, versioned in-process read
@@ -142,7 +164,7 @@ Newest entries appear first.
 
 <summary><strong>Verification governance, config bootstrap hygiene, and connector env hardening aligned with the current runtime</strong></summary>
 
-- Promoted the staged coverage-ratchet baseline to the enforced `45%` floor, added retained review-cycle evidence for hotspot families, and wired backend coverage collection through one shared local/CI helper instead of ad hoc `fail_under` edits.
+- Promoted the staged coverage-ratchet baseline to the then-enforced `45%` floor, added retained review-cycle evidence for hotspot families, and wired backend coverage collection through one shared local/CI helper instead of ad hoc `fail_under` edits.
 - Added focused connector and config/bootstrap hotspot regressions, reviewed the governed hotspot-family coverage summaries, and retired the temporary promotion-gap exceptions now that both promotion-blocking families are represented by explicit review evidence.
 - Added fail-closed test-debt governance for no-skip modules and mutation-survivor allowlist entries, with explicit `reason` and `review_after` metadata now enforced by the standard full-test flow.
 - Hardened pack metadata/version fallback parsing and made config/bootstrap imports side-effect-safe, so pack version fallback stays deterministic and importing config helpers no longer creates the state directory or log file before first real use.
@@ -261,7 +283,7 @@ Newest entries appear first.
 <summary><strong>Exception-fidelity cleanup and verification-governance baseline completed</strong></summary>
 
 - Preserved original traceback origins on the remaining planner/refiner/vision/config failure paths and aligned request-time default `LLMClient` refresh so runtime config hot-reload no longer mutates long-lived service state just to get a fresh client.
-- Added explicit coverage governance in `pyproject.toml`, including the active `45%` `fail_under`, visible missing-line reporting, and skip-covered output, so baseline quality drift is no longer implicit.
+- Added explicit coverage governance in `pyproject.toml`, including the then-active `45%` `fail_under`, visible missing-line reporting, and skip-covered output, so baseline quality drift is no longer implicit.
 - Added a stdlib-only governance verifier that fails closed when coverage config, adversarial mutation thresholds, SOP guidance, or mutation-survivor allowlist shape drift away from the enforced baseline.
 - Wired the governance verifier into Linux/Windows full-test flows and the repo pre-push gate, keeping local CI-parity checks aligned with the enforced verification contract.
 - Re-validated the full implementation on WSL with the full SOP gate: detect-secrets, pre-commit, governance verification, backend full suites, adaptive adversarial gate, and Playwright E2E.

@@ -16,6 +16,8 @@
   - `web/openclaw_notification_center.js`
   - `web/openclaw_banner_manager.js`
   - `web/openclaw_tabs.js`
+  - `web/openclaw_api.js` plus focused config/generation/resource/model/event API owners
+  - `web/tabs/settings_tab.js` plus focused status/LLM/secrets/logs/DOM/lifecycle owners
   - `web/admin_console_app.js`
   - `web/admin_console_api.js`
 - Runtime model:
@@ -69,7 +71,8 @@ Scored 1-5 (higher is better), weighted by current risk profile:
 
 1. OpenClaw frontend is host-coupled to ComfyUI extension lifecycle and remount behavior; framework migration introduces significant integration and lifecycle risk with limited near-term operator value.
 2. Current architecture already has critical stability controls (`ErrorBoundary`, tab remount safety, capability-gated registration, compatibility aliases, Vitest + Playwright lanes).
-   Recent decomposition work further reduced shell/admin/runtime hotspot size without introducing a framework dependency.
+   Recent decomposition work further reduced shell, API, Settings, and admin/runtime hotspot size
+   without introducing a framework dependency, while adding explicit stale-render disposal.
 3. Most remaining product priorities are functionality and security features, not frontend rendering abstraction gaps; migration now would consume high-risk bandwidth with weak ROI.
 
 ## Decision
