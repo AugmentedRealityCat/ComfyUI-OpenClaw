@@ -4098,20 +4098,6 @@
     {
       "tool": "ruff",
       "path": "scripts/quality_governance_common.py",
-      "code": "B905",
-      "message": "`zip()` without an explicit `strict=` parameter",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "scripts/quality_governance_common.py",
-      "code": "RUF007",
-      "message": "Prefer `itertools.pairwise()` over `zip()` when iterating over successive pairs",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "scripts/quality_governance_common.py",
       "code": "UP035",
       "message": "Import from `collections.abc` instead: `Iterable`",
       "count": 1

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import date
 from fnmatch import fnmatch
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -14,7 +16,9 @@ REQUIRED_HOTSPOT_FAMILIES = (
     "config_bootstrap",
 )
 MIN_PROMOTION_REVIEW_CYCLES = 2
-RATCHET55_CRITICAL_FAMILIES = ("safe_io", "security_boundary")
+RATCHET55_CRITICAL_FAMILIES = REQUIRED_HOTSPOT_FAMILIES
+_FULL_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -122,7 +126,7 @@ def load_and_validate_policy(path: Path) -> tuple[dict[str, Any] | None, list[st
             CoverageStage(stage_id=stage_id, min_fail_under=float(min_fail_under))
         )
 
-    for previous, current in zip(stages, stages[1:]):
+    for previous, current in pairwise(stages):
         if current.min_fail_under <= previous.min_fail_under:
             failures.append(
                 "coverage policy: coverage stages must increase strictly by min_fail_under"
@@ -172,7 +176,7 @@ def load_and_validate_policy(path: Path) -> tuple[dict[str, Any] | None, list[st
                 if index + 1 < len(stages_raw):
                     policy_next_stage = stages_raw[index + 1].get("id")
                 break
-    if policy_next_stage == "ratchet-55":
+    if current_stage == "ratchet-55" or policy_next_stage == "ratchet-55":
         families_by_id = {
             family.get("id"): family
             for family in family_payload
@@ -331,6 +335,131 @@ def load_and_validate_review_evidence(
             failures.append(
                 f"coverage review evidence: review {cycle_id!r} must include artifact_reference"
             )
+
+    if policy.get("current_stage") == "ratchet-55":
+        ratchet45_reviews = [
+            entry
+            for entry in reviews
+            if isinstance(entry, dict) and entry.get("stage_id") == "ratchet-45"
+        ]
+        required_families = set(policy.get("required_hotspot_families", []))
+        complete_reviews: list[dict[str, Any]] = []
+        for entry in ratchet45_reviews:
+            cycle_id = entry.get("cycle_id")
+            release_cycle = entry.get("release_cycle")
+            reviewed_commit = entry.get("reviewed_commit")
+            coverage_command = entry.get("coverage_command")
+            artifact_sha256 = entry.get("artifact_sha256")
+            raw_reviewed_families = entry.get("reviewed_hotspot_families")
+            reviewed_families = (
+                set(raw_reviewed_families)
+                if isinstance(raw_reviewed_families, list)
+                else set()
+            )
+            hotspot_percent = entry.get("hotspot_percent_covered")
+            owned_suites = entry.get("owned_regression_suites")
+
+            start_tag = (
+                release_cycle.get("start_tag")
+                if isinstance(release_cycle, dict)
+                else None
+            )
+            end_tag = (
+                release_cycle.get("end_tag")
+                if isinstance(release_cycle, dict)
+                else None
+            )
+            start_commit = (
+                release_cycle.get("start_commit")
+                if isinstance(release_cycle, dict)
+                else None
+            )
+            end_commit = (
+                release_cycle.get("end_commit")
+                if isinstance(release_cycle, dict)
+                else None
+            )
+            release_fields_valid = (
+                isinstance(start_tag, str)
+                and bool(start_tag.strip())
+                and isinstance(end_tag, str)
+                and bool(end_tag.strip())
+                and isinstance(start_commit, str)
+                and _FULL_GIT_SHA_RE.fullmatch(start_commit.lower()) is not None
+                and isinstance(end_commit, str)
+                and _FULL_GIT_SHA_RE.fullmatch(end_commit.lower()) is not None
+            )
+            artifact_valid = (
+                isinstance(artifact_sha256, str)
+                and _SHA256_RE.fullmatch(artifact_sha256.lower()) is not None
+                and isinstance(coverage_command, str)
+                and "run_backend_coverage.py" in coverage_command
+                and "--start-dir tests" in coverage_command
+            )
+            reviewed_commit_valid = (
+                isinstance(reviewed_commit, str)
+                and _FULL_GIT_SHA_RE.fullmatch(reviewed_commit.lower()) is not None
+                and isinstance(end_commit, str)
+                and reviewed_commit.lower() == end_commit.lower()
+            )
+            hotspot_valid = (
+                reviewed_families == required_families
+                and isinstance(hotspot_percent, dict)
+                and all(
+                    isinstance(hotspot_percent.get(family), (int, float))
+                    and 0.0 <= float(hotspot_percent[family]) <= 100.0
+                    for family in required_families
+                )
+            )
+            ownership_valid = isinstance(owned_suites, dict) and all(
+                isinstance(owned_suites.get(family), list)
+                and bool(owned_suites[family])
+                and all(
+                    isinstance(path, str)
+                    and path.startswith("tests/")
+                    and path.endswith(".py")
+                    for path in owned_suites[family]
+                )
+                for family in required_families
+            )
+            overall = entry.get("overall_percent_covered")
+            overall_valid = isinstance(overall, (int, float)) and float(overall) >= 45.0
+
+            if all(
+                (
+                    release_fields_valid,
+                    artifact_valid,
+                    reviewed_commit_valid,
+                    hotspot_valid,
+                    ownership_valid,
+                    overall_valid,
+                )
+            ):
+                complete_reviews.append(entry)
+            else:
+                failures.append(
+                    "coverage review evidence: ratchet-55 promotion review "
+                    f"{cycle_id!r} requires complete release-cycle evidence, full-suite "
+                    "artifact identity, all required hotspots, and owned regression suites"
+                )
+
+        if len(complete_reviews) >= MIN_PROMOTION_REVIEW_CYCLES:
+            for previous, current in pairwise(complete_reviews):
+                previous_cycle = previous.get("release_cycle")
+                current_cycle = current.get("release_cycle")
+                if not isinstance(previous_cycle, dict) or not isinstance(
+                    current_cycle, dict
+                ):
+                    continue
+                if (
+                    previous_cycle["end_tag"] != current_cycle["start_tag"]
+                    or previous_cycle["end_commit"].lower()
+                    != current_cycle["start_commit"].lower()
+                ):
+                    failures.append(
+                        "coverage review evidence: ratchet-55 requires consecutive release cycles"
+                    )
+                    break
 
     return payload, failures
 

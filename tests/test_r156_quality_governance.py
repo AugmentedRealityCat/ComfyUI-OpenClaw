@@ -24,6 +24,61 @@ class TestR156QualityGovernance(unittest.TestCase):
             check=False,
         )
 
+    @staticmethod
+    def _ratchet45_release_review(
+        *, cycle_id, start_tag, start_commit, end_tag, end_commit
+    ):
+        families = [
+            "safe_io",
+            "security_boundary",
+            "connector_config",
+            "config_bootstrap",
+        ]
+        return {
+            "cycle_id": cycle_id,
+            "stage_id": "ratchet-45",
+            "reviewed_at": "2026-07-11",
+            "overall_percent_covered": 69.78,
+            "reviewed_hotspot_families": families,
+            "hotspot_percent_covered": {
+                "safe_io": 82.95,
+                "security_boundary": 63.33,
+                "connector_config": 65.03,
+                "config_bootstrap": 68.77,
+            },
+            "owned_regression_suites": {
+                family: [f"tests/test_{family}.py"] for family in families
+            },
+            "release_cycle": {
+                "start_tag": start_tag,
+                "start_commit": start_commit,
+                "end_tag": end_tag,
+                "end_commit": end_commit,
+            },
+            "reviewed_commit": end_commit,
+            "coverage_command": "python scripts/run_backend_coverage.py --start-dir tests",
+            "artifact_reference": f"{end_tag} full-suite coverage JSON",
+            "artifact_sha256": "a" * 64,
+        }
+
+    @staticmethod
+    def _ratchet55_policy():
+        policy = sample_policy_payload(
+            current_stage="ratchet-55",
+            stages=[
+                {"id": "baseline-35", "min_fail_under": 35.0},
+                {"id": "ratchet-45", "min_fail_under": 45.0},
+                {"id": "ratchet-55", "min_fail_under": 55.0},
+            ],
+        )
+        for family in policy["hotspot_families"]:
+            family["ratchet55_readiness"] = {
+                "targeted_regression_suite": f"tests/test_{family['id']}.py",
+                "ownership_status": "targeted-regression-owned",
+                "readiness_notes": "Focused regression owner remains live.",
+            }
+        return policy
+
     def test_repo_governance_baseline_passes(self):
         result = self._run_script()
         self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
@@ -337,3 +392,248 @@ class TestR156QualityGovernance(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
             self.assertIn("GOVERNANCE-PASS", result.stdout)
+
+    def test_ratchet55_rejects_legacy_reviews_without_release_artifact_evidence(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            reviews = [
+                {
+                    "cycle_id": f"legacy-{index}",
+                    "stage_id": "ratchet-45",
+                    "reviewed_at": "2026-07-11",
+                    "overall_percent_covered": 70.0,
+                    "reviewed_hotspot_families": ["safe_io"],
+                    "hotspot_percent_covered": {"safe_io": 82.95},
+                    "artifact_reference": "transient coverage output",
+                }
+                for index in (1, 2)
+            ]
+            fixture = write_governance_baseline_fixture(
+                tmp,
+                fail_under=55.0,
+                coverage_policy_payload=self._ratchet55_policy(),
+                coverage_review_evidence_payload={
+                    "schema_version": 1,
+                    "reviews": reviews,
+                },
+            )
+
+            result = self._run_script(
+                "--pyproject",
+                str(fixture["pyproject"]),
+                "--adversarial-gate",
+                str(fixture["adversarial_gate"]),
+                "--test-sop",
+                str(fixture["test_sop"]),
+                "--mutation-survivor-allowlist",
+                str(fixture["survivor_allowlist"]),
+                "--release-policy-doc",
+                str(fixture["release_policy_doc"]),
+                "--coverage-policy",
+                str(fixture["coverage_policy"]),
+                "--coverage-review-evidence",
+                str(fixture["coverage_review_evidence"]),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("complete release-cycle evidence", result.stdout)
+
+    def test_ratchet55_rejects_malformed_review_types_without_crashing(self):
+        malformed = self._ratchet45_release_review(
+            cycle_id="malformed-review",
+            start_tag="v0.9.0",
+            start_commit="1" * 40,
+            end_tag="v0.9.5",
+            end_commit="2" * 40,
+        )
+        malformed["reviewed_hotspot_families"] = 7
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fixture = write_governance_baseline_fixture(
+                tmp,
+                fail_under=55.0,
+                coverage_policy_payload=self._ratchet55_policy(),
+                coverage_review_evidence_payload={
+                    "schema_version": 1,
+                    "reviews": [
+                        malformed,
+                        malformed | {"cycle_id": "malformed-review-2"},
+                    ],
+                },
+            )
+            result = self._run_script(
+                "--pyproject",
+                str(fixture["pyproject"]),
+                "--adversarial-gate",
+                str(fixture["adversarial_gate"]),
+                "--test-sop",
+                str(fixture["test_sop"]),
+                "--mutation-survivor-allowlist",
+                str(fixture["survivor_allowlist"]),
+                "--release-policy-doc",
+                str(fixture["release_policy_doc"]),
+                "--coverage-policy",
+                str(fixture["coverage_policy"]),
+                "--coverage-review-evidence",
+                str(fixture["coverage_review_evidence"]),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("complete release-cycle evidence", result.stdout)
+
+    def test_ratchet55_rejects_nonconsecutive_release_cycles(self):
+        first = self._ratchet45_release_review(
+            cycle_id="v0.9.0-to-v0.9.5",
+            start_tag="v0.9.0",
+            start_commit="1" * 40,
+            end_tag="v0.9.5",
+            end_commit="2" * 40,
+        )
+        second = self._ratchet45_release_review(
+            cycle_id="v0.9.7-to-v1.0.0",
+            start_tag="v0.9.7",
+            start_commit="3" * 40,
+            end_tag="v1.0.0",
+            end_commit="4" * 40,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fixture = write_governance_baseline_fixture(
+                tmp,
+                fail_under=55.0,
+                coverage_policy_payload=self._ratchet55_policy(),
+                coverage_review_evidence_payload={
+                    "schema_version": 1,
+                    "reviews": [first, second],
+                },
+            )
+            result = self._run_script(
+                "--pyproject",
+                str(fixture["pyproject"]),
+                "--adversarial-gate",
+                str(fixture["adversarial_gate"]),
+                "--test-sop",
+                str(fixture["test_sop"]),
+                "--mutation-survivor-allowlist",
+                str(fixture["survivor_allowlist"]),
+                "--release-policy-doc",
+                str(fixture["release_policy_doc"]),
+                "--coverage-policy",
+                str(fixture["coverage_policy"]),
+                "--coverage-review-evidence",
+                str(fixture["coverage_review_evidence"]),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("consecutive release cycles", result.stdout)
+
+    def test_ratchet55_accepts_complete_consecutive_release_evidence(self):
+        first = self._ratchet45_release_review(
+            cycle_id="v0.9.0-to-v0.9.5",
+            start_tag="v0.9.0",
+            start_commit="1" * 40,
+            end_tag="v0.9.5",
+            end_commit="2" * 40,
+        )
+        second = self._ratchet45_release_review(
+            cycle_id="v0.9.5-to-v1.0.0",
+            start_tag="v0.9.5",
+            start_commit="2" * 40,
+            end_tag="v1.0.0",
+            end_commit="3" * 40,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fixture = write_governance_baseline_fixture(
+                tmp,
+                fail_under=55.0,
+                coverage_policy_payload=self._ratchet55_policy(),
+                coverage_review_evidence_payload={
+                    "schema_version": 1,
+                    "reviews": [first, second],
+                },
+            )
+            result = self._run_script(
+                "--pyproject",
+                str(fixture["pyproject"]),
+                "--adversarial-gate",
+                str(fixture["adversarial_gate"]),
+                "--test-sop",
+                str(fixture["test_sop"]),
+                "--mutation-survivor-allowlist",
+                str(fixture["survivor_allowlist"]),
+                "--release-policy-doc",
+                str(fixture["release_policy_doc"]),
+                "--coverage-policy",
+                str(fixture["coverage_policy"]),
+                "--coverage-review-evidence",
+                str(fixture["coverage_review_evidence"]),
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+
+    def test_ratchet55_policy_and_fail_under_must_move_atomically(self):
+        first = self._ratchet45_release_review(
+            cycle_id="v0.9.0-to-v0.9.5",
+            start_tag="v0.9.0",
+            start_commit="1" * 40,
+            end_tag="v0.9.5",
+            end_commit="2" * 40,
+        )
+        second = self._ratchet45_release_review(
+            cycle_id="v0.9.5-to-v1.0.0",
+            start_tag="v0.9.5",
+            start_commit="2" * 40,
+            end_tag="v1.0.0",
+            end_commit="3" * 40,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fixture = write_governance_baseline_fixture(
+                tmp,
+                fail_under=45.0,
+                coverage_policy_payload=self._ratchet55_policy(),
+                coverage_review_evidence_payload={
+                    "schema_version": 1,
+                    "reviews": [first, second],
+                },
+            )
+            result = self._run_script(
+                "--pyproject",
+                str(fixture["pyproject"]),
+                "--adversarial-gate",
+                str(fixture["adversarial_gate"]),
+                "--test-sop",
+                str(fixture["test_sop"]),
+                "--mutation-survivor-allowlist",
+                str(fixture["survivor_allowlist"]),
+                "--release-policy-doc",
+                str(fixture["release_policy_doc"]),
+                "--coverage-policy",
+                str(fixture["coverage_policy"]),
+                "--coverage-review-evidence",
+                str(fixture["coverage_review_evidence"]),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "does not match policy current-stage floor 55.0", result.stdout
+            )
+
+    def test_repo_ratchet55_owned_regression_suites_exist(self):
+        payload = json.loads(
+            (ROOT / "tests" / "coverage_promotion_reviews.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        ratchet45_reviews = [
+            review
+            for review in payload["reviews"]
+            if review["stage_id"] == "ratchet-45"
+        ]
+        self.assertGreaterEqual(len(ratchet45_reviews), 2)
+        for review in ratchet45_reviews:
+            for suites in review["owned_regression_suites"].values():
+                for relative_path in suites:
+                    self.assertTrue((ROOT / relative_path).is_file(), relative_path)

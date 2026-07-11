@@ -47,7 +47,7 @@ If a change intentionally modifies contract behavior:
   - CodeQL analysis must stay versioned in `.github/workflows/codeql.yml`; do not rely on UI-only default-setup drift for the repository baseline
   - CodeQL rollout remains visibility-first until the active backlog is burned down; treat new workflow findings as triage input, not an automatic merge blocker, unless the gating policy is explicitly tightened in roadmap/docs
 - `pyproject.toml` must keep:
-  - `fail_under >= 45.0`
+  - `fail_under >= 55.0`
   - `show_missing = true`
   - `skip_covered = true`
 - staged coverage ratchet policy (`tests/coverage_governance_policy.json`) is the source of truth for:
@@ -59,6 +59,8 @@ If a change intentionally modifies contract behavior:
   - `python scripts/report_coverage_governance.py --coverage-json <path-to-coverage.json>`
 - release-cycle promotion evidence must be retained in:
   - `tests/coverage_promotion_reviews.json`
+  - ratchet-55 reviews must contain consecutive release boundaries, immutable commit and
+    full-suite artifact identity, every required hotspot percentage, and owned regression suites
 - backend coverage gate should use:
   - `python scripts/run_backend_coverage.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json --coverage-json .tmp/coverage/backend_unit_coverage.json`
 - Test debt governance remains fail-closed:

@@ -288,13 +288,15 @@ IMPORTANT:
 ## Coverage Governance Baseline (Required)
 
 - Coverage configuration lives in `pyproject.toml` and must keep:
-  - `fail_under >= 45.0`
+  - `fail_under >= 55.0`
   - `show_missing = true`
   - `skip_covered = true`
 - staged coverage ratchet policy (`tests/coverage_governance_policy.json`) lives in the repo and governs the current floor plus future ratchet targets.
   - `pyproject.toml` must keep `fail_under` aligned with the current stage floor declared there.
   - Planned ratchet targets are governance metadata, not implicit permission to change `fail_under` ad hoc.
 - retained promotion evidence lives in `tests/coverage_promotion_reviews.json`.
+  - the ratchet-55 promotion requires two consecutive ratchet-45 release-cycle reviews with
+    immutable commit/artifact identity, all required hotspot percentages, and owned suites.
 - backend unit coverage should be gathered with:
 
 ```bash

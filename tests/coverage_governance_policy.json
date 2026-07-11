@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "current_stage": "ratchet-45",
+  "current_stage": "ratchet-55",
   "stages": [
     {
       "id": "baseline-35",
@@ -76,7 +76,12 @@
       "paths": [
         "connector/config.py",
         "connector/router.py"
-      ]
+      ],
+      "ratchet55_readiness": {
+        "targeted_regression_suite": "tests/test_r177_connector_config_env.py; tests/connector/test_config_r80.py; tests/connector/test_router_hotspot_r181.py; tests/test_r222_connector_router_decomposition.py",
+        "ownership_status": "targeted-regression-owned",
+        "readiness_notes": "Environment precedence, connector policy, router boundaries, and decomposed command ownership remain covered at the promoted floor."
+      }
     },
     {
       "id": "config_bootstrap",
@@ -84,7 +89,12 @@
         "config.py",
         "services/runtime_config.py",
         "services/effective_config.py"
-      ]
+      ],
+      "ratchet55_readiness": {
+        "targeted_regression_suite": "tests/test_r176_import_safe_config.py; tests/test_r182_effective_config_hotspot.py; tests/test_runtime_config.py; tests/test_effective_config.py",
+        "ownership_status": "targeted-regression-owned",
+        "readiness_notes": "Import-safe bootstrap, effective configuration, runtime configuration, and precedence behavior have explicit regression ownership."
+      }
     }
   ],
   "exceptions": []
