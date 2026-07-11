@@ -88,7 +88,10 @@ class TestR155ExceptionFidelity(unittest.TestCase):
         )
 
     def test_api_config_runtime_error_preserves_original_traceback_line(self):
+        import inspect
+
         from api.config import llm_models_handler
+        from api.config_model_handlers import llm_models_response
 
         request = MagicMock()
         request.query = {}
@@ -113,8 +116,17 @@ class TestR155ExceptionFidelity(unittest.TestCase):
                 lambda: self._run_async(llm_models_handler(request))
             )
 
+        source, start_line = inspect.getsourcelines(llm_models_response)
+        call_offset = next(
+            index
+            for index, line in enumerate(source)
+            if "models = deps.fetch_remote_model_list(" in line
+        )
         self._assert_traceback_contains_frame(
-            tb, "api/config.py", 494, "models = fetch_remote_model_list("
+            tb,
+            "api/config_model_handlers.py",
+            start_line + call_offset,
+            "models = deps.fetch_remote_model_list(",
         )
 
     def _run_async(self, coro):

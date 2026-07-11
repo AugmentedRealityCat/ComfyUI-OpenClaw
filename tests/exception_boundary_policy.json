@@ -133,24 +133,31 @@
         }
       ]
     },
-    "api/config.py": {
+    "api/config_projection_handlers.py": {
       "coverage": "selected_scopes",
       "selected_scopes": [
-        "config_get_handler",
-        "llm_test_handler",
-        "llm_chat_handler"
+        "config_get_response"
       ],
       "broad_catches": [
         {
-          "scope": "config_get_handler",
+          "scope": "config_get_response",
           "expected_count": 1,
           "classification": "allowed_boundary_guard",
           "reason": "The admin read boundary returns a fixed content-free 500 code after tenant-specific failures.",
           "regression_owner": "tests/test_r219_exception_boundary_phase2.py",
           "review_after": "2027-01-11"
-        },
+        }
+      ]
+    },
+    "api/config_llm_handlers.py": {
+      "coverage": "selected_scopes",
+      "selected_scopes": [
+        "llm_test_response",
+        "llm_chat_response"
+      ],
+      "broad_catches": [
         {
-          "scope": "llm_test_handler",
+          "scope": "llm_test_response",
           "expected_count": 2,
           "classification": "allowed_boundary_guard",
           "reason": "Request decoding and final LLM test translation retain existing response shape with fixed errors.",
@@ -158,7 +165,7 @@
           "review_after": "2027-01-11"
         },
         {
-          "scope": "llm_chat_handler",
+          "scope": "llm_chat_response",
           "expected_count": 2,
           "classification": "allowed_boundary_guard",
           "reason": "Chat request decoding and final server-error translation are public route boundaries.",

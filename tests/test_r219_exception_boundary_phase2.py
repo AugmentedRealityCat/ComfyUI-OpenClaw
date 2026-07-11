@@ -38,7 +38,8 @@ class TestPolicyV2(unittest.TestCase):
                 "api/route_orchestration.py",
                 "connector/router.py",
                 "services/route_bootstrap.py",
-                "api/config.py",
+                "api/config_projection_handlers.py",
+                "api/config_llm_handlers.py",
                 "connector/platforms/slack_webhook.py",
                 "connector/platforms/feishu_webhook.py",
             },
@@ -92,9 +93,9 @@ class TestPolicyV2(unittest.TestCase):
         )
 
         stale_scope = copy.deepcopy(policy)
-        stale_scope["selected_modules"]["api/config.py"]["selected_scopes"].append(
-            "removed_scope"
-        )
+        stale_scope["selected_modules"]["api/config_projection_handlers.py"][
+            "selected_scopes"
+        ].append("removed_scope")
         self.assertTrue(
             any(
                 "selected scope has no broad catch" in item
@@ -261,8 +262,8 @@ class TestExpectedParserBoundaries(unittest.TestCase):
     def test_config_numeric_parsers_have_no_broad_catch(self):
         from scripts.verify_exception_boundary_policy import iter_broad_catches
 
-        catches = list(iter_broad_catches(ROOT / "api" / "config.py"))
-        llm_test = [catch for catch in catches if catch.scope == "llm_test_handler"]
+        catches = list(iter_broad_catches(ROOT / "api" / "config_llm_handlers.py"))
+        llm_test = [catch for catch in catches if catch.scope == "llm_test_response"]
         self.assertEqual(len(llm_test), 2)
 
 

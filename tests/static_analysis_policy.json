@@ -124,7 +124,7 @@
       "path": "api/config.py",
       "code": "unused-ignore",
       "message": "Unused \"type: ignore\" comment",
-      "count": 6
+      "count": 3
     },
     {
       "tool": "mypy",
@@ -2490,20 +2490,6 @@
       "path": "api/checkpoints_handler.py",
       "code": "UP035",
       "message": "`typing.Dict` is deprecated, use `dict` instead",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/config.py",
-      "code": "F401",
-      "message": "`services.provider_errors.ProviderHTTPError` imported but unused",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "api/config.py",
-      "code": "RUF010",
-      "message": "Use explicit conversion flag",
       "count": 1
     },
     {
