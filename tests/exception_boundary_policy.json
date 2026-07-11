@@ -51,7 +51,7 @@
         }
       ]
     },
-    "connector/router.py": {
+    "connector/router_admin_handlers.py": {
       "coverage": "all_broad_catches",
       "broad_catches": [
         {
@@ -61,17 +61,27 @@
           "reason": "Standalone connector tests may stub the sanitizer import graph.",
           "regression_owner": "tests/connector/test_router_hotspot_r181.py",
           "review_after": "2027-01-11"
-        },
+        }
+      ]
+    },
+    "connector/router_dispatch.py": {
+      "coverage": "all_broad_catches",
+      "broad_catches": [
         {
-          "scope": "CommandRouter.handle",
+          "scope": "RouterDispatchMixin.handle",
           "expected_count": 1,
           "classification": "allowed_boundary_guard",
           "reason": "External command dispatch translates handler failures to a fixed operator response.",
           "regression_owner": "tests/connector/test_router_hotspot_r181.py",
           "review_after": "2027-01-11"
-        },
+        }
+      ]
+    },
+    "connector/router_execution_handlers.py": {
+      "coverage": "all_broad_catches",
+      "broad_catches": [
         {
-          "scope": "CommandRouter._get_template_meta",
+          "scope": "RouterExecutionMixin._get_template_meta",
           "expected_count": 1,
           "classification": "allowed_boundary_guard",
           "reason": "Template metadata lookup is best-effort and has an explicit prompt-name fallback.",

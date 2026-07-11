@@ -36,7 +36,9 @@ class TestPolicyV2(unittest.TestCase):
             {
                 "api/route_handlers.py",
                 "api/route_orchestration.py",
-                "connector/router.py",
+                "connector/router_admin_handlers.py",
+                "connector/router_dispatch.py",
+                "connector/router_execution_handlers.py",
                 "services/route_bootstrap.py",
                 "api/config_projection_handlers.py",
                 "api/config_llm_handlers.py",

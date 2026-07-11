@@ -760,7 +760,7 @@
       "tool": "mypy",
       "path": "connector/platforms/slack_webhook.py",
       "code": "arg-type",
-      "message": "Argument 1 to \"_is_admin\" of \"CommandRouter\" has incompatible type \"CommandRequest\"; expected \"str\"",
+      "message": "Argument 1 to \"_is_admin\" of \"RouterDispatchMixin\" has incompatible type \"CommandRequest\"; expected \"str\"",
       "count": 1
     },
     {
@@ -922,20 +922,6 @@
       "path": "connector/router.py",
       "code": "assignment",
       "message": "Incompatible default for parameter \"poller\" (default has type \"None\", parameter has type \"ResultsPoller\")",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "connector/router.py",
-      "code": "no-any-return",
-      "message": "Returning Any from function declared to return \"dict[str, Any]\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "connector/router.py",
-      "code": "unused-ignore",
-      "message": "Unused \"type: ignore\" comment",
       "count": 1
     },
     {
@@ -3562,132 +3548,6 @@
       "code": "UP045",
       "message": "Use `X | None` for type annotations",
       "count": 6
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "E731",
-      "message": "Do not assign a `lambda` expression, use a `def`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "F841",
-      "message": "Local variable `requires_admin` is assigned to but never used",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "RUF010",
-      "message": "Use explicit conversion flag",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM102",
-      "message": "Use a single `if` statement instead of nested `if` statements",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `channel_id in self.config.discord_allowed_channels` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `channel_id in self.config.feishu_allowed_chats` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `channel_id in self.config.line_allowed_groups` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `channel_id in self.config.slack_allowed_channels` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `sender_id in self.config.kakao_allowed_users` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `sender_id in self.config.wechat_allowed_users` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition `sender_id in self.config.whatsapp_allowed_users` directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM103",
-      "message": "Return the condition directly",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "SIM108",
-      "message": "Use ternary operator `canonical_cmd = aliases[0] if isinstance(aliases, tuple) else aliases` instead of `if`-`else`-block",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "UP006",
-      "message": "Use `dict` instead of `Dict` for type annotation",
-      "count": 8
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "UP006",
-      "message": "Use `list` instead of `List` for type annotation",
-      "count": 17
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "UP035",
-      "message": "`typing.Dict` is deprecated, use `dict` instead",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "UP035",
-      "message": "`typing.List` is deprecated, use `list` instead",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "connector/router.py",
-      "code": "UP045",
-      "message": "Use `X | None` for type annotations",
-      "count": 2
     },
     {
       "tool": "ruff",
