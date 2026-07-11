@@ -68,6 +68,23 @@ describe("TabManager", () => {
         expect(contentEl.querySelector("#openclaw-tab-jobs").textContent).toBe("Jobs loaded");
     });
 
+    it("disposes pending work before switching and rerenders when revisited", () => {
+        const manager = new TabManager();
+        const { tabsEl, contentEl } = makeMount();
+        const render = vi.fn(pane => { pane.textContent = "pending"; });
+        const dispose = vi.fn(() => true);
+        manager.registerTab({ id: "settings", title: "Settings", render, dispose });
+        manager.registerTab({ id: "jobs", title: "Jobs", render: () => {} });
+        manager.init(tabsEl, contentEl);
+
+        manager.activateTab("jobs");
+        expect(dispose).toHaveBeenCalledWith(contentEl.querySelector("#openclaw-tab-settings"));
+        expect(contentEl.querySelector("#openclaw-tab-settings").hasChildNodes()).toBe(false);
+
+        manager.activateTab("settings");
+        expect(render).toHaveBeenCalledTimes(2);
+    });
+
     it("routes async render failures through the tab error boundary", async () => {
         const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
         const manager = new TabManager();

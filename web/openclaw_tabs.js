@@ -17,6 +17,7 @@ import {
  * @property {string} title Visible tab label and error-boundary name.
  * @property {string=} icon Optional icon class for the tab button.
  * @property {(pane: HTMLElement) => (void|Promise<void>)} render Render function for the tab pane.
+ * @property {(pane: HTMLElement) => boolean=} dispose Optional pending-render cleanup; true requests rerender.
  * @property {boolean=} loaded Internal lazy-render state.
  */
 
@@ -105,6 +106,21 @@ export class TabManager {
     }
 
     activateTab(id) {
+        const previousId = this.activeTabId;
+        if (previousId && previousId !== id) {
+            const previousTab = this.tabs.find(tab => tab.id === previousId);
+            const previousPane =
+                this.contentEl.querySelector(`#openclaw-tab-${previousId}`) ||
+                this.contentEl.querySelector(`#moltbot-tab-${previousId}`);
+            if (previousTab?.dispose && previousPane) {
+                // IMPORTANT: invalidate pending async tab work before hiding its owner pane.
+                const requiresRerender = previousTab.dispose(previousPane) === true;
+                if (requiresRerender) {
+                    previousTab.loaded = false;
+                    previousPane.replaceChildren();
+                }
+            }
+        }
         this.activeTabId = id;
         setMirroredStorageValue(localStorage, STORAGE_KEYS.local.activeTab, id);
 
