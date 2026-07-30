@@ -3,6 +3,7 @@ import { expect } from '@playwright/test';
 const HOST_SURFACES = Object.freeze({
   standaloneFrontend: 'standalone_frontend',
   desktop: 'desktop',
+  comfyDesktop: 'comfy_desktop',
 });
 
 function resolveUiTimeoutMs() {
@@ -70,6 +71,13 @@ function normalizeHostSurface(hostSurface) {
   if (hostSurface === HOST_SURFACES.desktop || hostSurface === 'desktop') {
     return HOST_SURFACES.desktop;
   }
+  if (
+    hostSurface === HOST_SURFACES.comfyDesktop
+    || hostSurface === 'current_desktop'
+    || hostSurface === 'managed_install'
+  ) {
+    return HOST_SURFACES.comfyDesktop;
+  }
   return HOST_SURFACES.standaloneFrontend;
 }
 
@@ -77,23 +85,54 @@ export async function installHostRuntime(page, { hostSurface = HOST_SURFACES.sta
   const resolvedHostSurface = normalizeHostSurface(hostSurface);
 
   await page.addInitScript((options) => {
-    const currentHostSurface = options?.hostSurface === 'desktop'
-      ? 'desktop'
-      : 'standalone_frontend';
+    const currentHostSurface = options?.hostSurface || 'standalone_frontend';
 
     window.__openclawTestHostSurface = currentHostSurface;
+    window.__openclawBridgeActivity = { memberReads: [], calls: [] };
+
+    const instrumentBridge = (kind, bridge) => new Proxy(bridge, {
+      get(target, property, receiver) {
+        window.__openclawBridgeActivity.memberReads.push(`${kind}.${String(property)}`);
+        return Reflect.get(target, property, receiver);
+      },
+    });
 
     if (currentHostSurface === 'desktop') {
-      window.__DISTRIBUTION__ = 'desktop';
-      window.electronAPI = window.electronAPI || {
-        getPlatform: () => 'win32',
+      window.electronAPI = instrumentBridge('electron_api', {
+        getPlatform: () => {
+          window.__openclawBridgeActivity.calls.push('electron_api.getPlatform');
+          return 'win32';
+        },
         platform: 'win32',
         versions: { electron: 'test' },
-      };
+      });
       try {
         delete window.__OPENCLAW_HOST_SURFACE__;
       } catch (error) {
         window.__OPENCLAW_HOST_SURFACE__ = undefined;
+      }
+      try {
+        delete window.__DISTRIBUTION__;
+        delete window.__comfyDesktop2;
+      } catch (error) {
+        window.__DISTRIBUTION__ = undefined;
+        window.__comfyDesktop2 = undefined;
+      }
+    } else if (currentHostSurface === 'comfy_desktop') {
+      window.__comfyDesktop2 = instrumentBridge('comfy_desktop2', {
+        isRemote: () => {
+          window.__openclawBridgeActivity.calls.push('comfy_desktop2.isRemote');
+          return false;
+        },
+      });
+      try {
+        delete window.__OPENCLAW_HOST_SURFACE__;
+        delete window.__DISTRIBUTION__;
+        delete window.electronAPI;
+      } catch (error) {
+        window.__OPENCLAW_HOST_SURFACE__ = undefined;
+        window.__DISTRIBUTION__ = undefined;
+        window.electronAPI = undefined;
       }
     } else {
       window.__OPENCLAW_HOST_SURFACE__ = 'standalone_frontend';
@@ -103,8 +142,10 @@ export async function installHostRuntime(page, { hostSurface = HOST_SURFACES.sta
       window.__DISTRIBUTION__ = 'localhost';
       try {
         delete window.electronAPI;
+        delete window.__comfyDesktop2;
       } catch (error) {
         window.electronAPI = undefined;
+        window.__comfyDesktop2 = undefined;
       }
     }
 

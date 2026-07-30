@@ -40,6 +40,16 @@ function normalizeSurfaceName(surface) {
         return HOST_SURFACES.desktop;
     }
     if (
+        surface === HOST_SURFACES.comfyDesktop ||
+        surface === "current_desktop" ||
+        surface === "managed_install"
+    ) {
+        return HOST_SURFACES.comfyDesktop;
+    }
+    if (surface === "legacy_desktop" || surface === "legacy_fixed_bundle") {
+        return HOST_SURFACES.desktop;
+    }
+    if (
         surface === HOST_SURFACES.standaloneFrontend ||
         surface === "standalone" ||
         surface === "standalone_frontend" ||
@@ -50,30 +60,115 @@ function normalizeSurfaceName(surface) {
     return null;
 }
 
-export function resolveHostSurface({ app = null, win = window } = {}) {
-    const explicitSurface = normalizeSurfaceName(
-        app?.openclawHostSurface || app?.hostSurface || win?.__OPENCLAW_HOST_SURFACE__
-    );
-    if (explicitSurface) return explicitSurface;
+function safeRead(target, property) {
+    if (target === null || target === undefined) return undefined;
+    try {
+        return target[property];
+    } catch {
+        return undefined;
+    }
+}
 
-    const distributionSurface = normalizeSurfaceName(win?.__DISTRIBUTION__);
-    if (distributionSurface) return distributionSurface;
+function isBridgeObject(value) {
+    if (value === null || typeof value !== "object") return false;
+    try {
+        return !Array.isArray(value);
+    } catch {
+        return false;
+    }
+}
 
-    if (win?.electronAPI) {
-        return HOST_SURFACES.desktop;
+function bridgeKindForSurface(hostSurface) {
+    if (hostSurface === HOST_SURFACES.comfyDesktop) return "comfy_desktop2";
+    if (hostSurface === HOST_SURFACES.desktop) return "electron_api";
+    return null;
+}
+
+function detectedBridgeKindForSurface(hostSurface, win) {
+    const bridgeKind = bridgeKindForSurface(hostSurface);
+    if (bridgeKind === "comfy_desktop2") {
+        return isBridgeObject(safeRead(win, "__comfyDesktop2"))
+            ? bridgeKind
+            : null;
+    }
+    if (bridgeKind === "electron_api") {
+        return isBridgeObject(safeRead(win, "electronAPI")) ? bridgeKind : null;
+    }
+    return null;
+}
+
+function inspectHostSurface(options = {}) {
+    const app = safeRead(options, "app");
+    const explicitWindow = safeRead(options, "win");
+    const win =
+        explicitWindow === undefined ? safeRead(globalThis, "window") : explicitWindow;
+
+    for (const [target, property] of [
+        [app, "openclawHostSurface"],
+        [app, "hostSurface"],
+        [win, "__OPENCLAW_HOST_SURFACE__"],
+    ]) {
+        const surface = normalizeSurfaceName(safeRead(target, property));
+        if (surface) {
+            return {
+                hostSurface: surface,
+                detectedBridgeKind: detectedBridgeKindForSurface(surface, win),
+            };
+        }
     }
 
-    return HOST_SURFACES.standaloneFrontend;
+    const distributionSurface = normalizeSurfaceName(
+        safeRead(win, "__DISTRIBUTION__")
+    );
+    if (distributionSurface) {
+        return {
+            hostSurface: distributionSurface,
+            detectedBridgeKind: detectedBridgeKindForSurface(
+                distributionSurface,
+                win
+            ),
+        };
+    }
+
+    // CRITICAL: bridge detection must remain presence-only. Reading members or calling
+    // methods can cross privileged Desktop IPC and privacy boundaries.
+    if (isBridgeObject(safeRead(win, "__comfyDesktop2"))) {
+        return {
+            hostSurface: HOST_SURFACES.comfyDesktop,
+            detectedBridgeKind: "comfy_desktop2",
+        };
+    }
+    if (isBridgeObject(safeRead(win, "electronAPI"))) {
+        return {
+            hostSurface: HOST_SURFACES.desktop,
+            detectedBridgeKind: "electron_api",
+        };
+    }
+
+    return {
+        hostSurface: HOST_SURFACES.standaloneFrontend,
+        detectedBridgeKind: null,
+    };
+}
+
+export function resolveHostSurface(options = {}) {
+    return inspectHostSurface(options).hostSurface;
 }
 
 export function getHostSurfaceCapabilities(options = {}) {
-    const hostSurface = resolveHostSurface(options);
+    const { hostSurface, detectedBridgeKind } = inspectHostSurface(options);
     const reference = HOST_SURFACE_REFERENCES[hostSurface] || {};
+    const isDesktop =
+        hostSurface === HOST_SURFACES.desktop ||
+        hostSurface === HOST_SURFACES.comfyDesktop;
+    const desktopBridgeKind = bridgeKindForSurface(hostSurface);
     return {
         hostSurface,
-        isDesktop: hostSurface === HOST_SURFACES.desktop,
-        supportsElectronBridge:
-            hostSurface === HOST_SURFACES.desktop && !!options?.win?.electronAPI,
+        isDesktop,
+        supportsElectronBridge: isDesktop && detectedBridgeKind === desktopBridgeKind,
+        desktopGeneration: isDesktop ? reference.generation || null : null,
+        desktopBridgeKind,
+        hostedVersionMode: isDesktop ? reference.hostedVersionMode || null : null,
         reference,
     };
 }
@@ -85,9 +180,10 @@ export function stampHostSurfaceMetadata(container, options = {}) {
         container.dataset.openclawDesktopHost = capabilities.isDesktop
             ? "true"
             : "false";
-        container.dataset.openclawReferenceFrontend = capabilities.isDesktop
-            ? capabilities.reference.standaloneFrontendVersion || ""
-            : capabilities.reference.frontendVersion || "";
+        container.dataset.openclawReferenceFrontend =
+            capabilities.hostSurface === HOST_SURFACES.desktop
+                ? capabilities.reference.standaloneFrontendVersion || ""
+                : capabilities.reference.frontendVersion || "";
         const currentDesktopReference =
             HOST_SURFACE_REFERENCES[HOST_SURFACES.comfyDesktop];
         container.dataset.openclawCurrentDesktopVersion =
@@ -96,14 +192,26 @@ export function stampHostSurfaceMetadata(container, options = {}) {
             currentDesktopReference.generation;
         container.dataset.openclawCurrentDesktopHostedVersionMode =
             currentDesktopReference.hostedVersionMode;
-        if (capabilities.isDesktop) {
-            container.dataset.openclawDesktopVersion = capabilities.reference.desktopVersion || "";
-            container.dataset.openclawDesktopCoreVersion = capabilities.reference.coreVersion || "";
-            container.dataset.openclawDesktopEmbeddedFrontend =
-                capabilities.reference.embeddedFrontendVersion || "";
-            container.dataset.openclawDesktopFrontendParity =
-                capabilities.reference.frontendParity || "";
-        }
+        container.dataset.openclawDesktopGeneration =
+            capabilities.desktopGeneration || "";
+        container.dataset.openclawDesktopBridgeKind =
+            capabilities.desktopBridgeKind || "";
+        container.dataset.openclawDesktopHostedVersionMode =
+            capabilities.hostedVersionMode || "";
+        container.dataset.openclawDesktopVersion = capabilities.isDesktop
+            ? capabilities.reference.desktopVersion || ""
+            : "";
+        container.dataset.openclawDesktopCoreVersion = capabilities.isDesktop
+            ? capabilities.reference.coreVersion || ""
+            : "";
+        container.dataset.openclawDesktopEmbeddedFrontend = capabilities.isDesktop
+            ? capabilities.reference.embeddedFrontendVersion ||
+              capabilities.reference.frontendVersion ||
+              ""
+            : "";
+        container.dataset.openclawDesktopFrontendParity = capabilities.isDesktop
+            ? capabilities.reference.frontendParity || ""
+            : "";
     }
     return capabilities;
 }
