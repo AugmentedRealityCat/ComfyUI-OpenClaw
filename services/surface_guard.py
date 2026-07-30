@@ -32,8 +32,23 @@ web = import_aiohttp_web()
 logger = logging.getLogger(__name__)
 
 
+def _get_installed_posture():
+    try:
+        from .effective_security_posture import get_effective_security_posture
+
+        return get_effective_security_posture(required=False)
+    except ImportError:
+        return None
+
+
 def _is_fail_closed_profile() -> bool:
     """Return True if errors should fail-closed (block) rather than fail-open."""
+    posture = _get_installed_posture()
+    if posture is not None:
+        return bool(
+            posture.deployment_profile == "public"
+            or posture.runtime_profile == "hardened"
+        )
     profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local").lower()
     if profile == "public":
         return True
@@ -62,9 +77,14 @@ def check_surface(surface_id: str, request: web.Request = None) -> web.Response 
     try:
         from .control_plane import get_blocked_surfaces, resolve_control_plane_mode
 
-        profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
-        mode = resolve_control_plane_mode(profile)
-        blocked = get_blocked_surfaces(profile, mode)
+        posture = _get_installed_posture()
+        profile = (
+            posture.deployment_profile
+            if posture is not None
+            else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
+        )
+        mode = resolve_control_plane_mode(profile, posture=posture)
+        blocked = get_blocked_surfaces(profile, mode, posture=posture)
         blocked_ids = {sid: desc for sid, desc in blocked}
 
         if surface_id not in blocked_ids:

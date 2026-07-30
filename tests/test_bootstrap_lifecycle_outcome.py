@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 
 from services import route_bootstrap
 from services.startup_lifecycle import (
-    STARTUP_DIAGNOSTIC_KEYS,
     MAX_DIAGNOSTIC_MS,
     MAX_WARMUPS,
+    STARTUP_DIAGNOSTIC_KEYS,
     StartupLifecycle,
     StartupPhase,
     StartupReason,
@@ -78,9 +78,7 @@ class TestStartupOutcomeContract(unittest.TestCase):
         diagnostics = lifecycle.snapshot().to_diagnostics()
         self.assertEqual(diagnostics["phase"], "complete")
         self.assertEqual(diagnostics["state"], "ready")
-        self.assertEqual(
-            diagnostics["reason_code"], "route_registration_succeeded"
-        )
+        self.assertEqual(diagnostics["reason_code"], "route_registration_succeeded")
         self.assertTrue(diagnostics["ready"])
         self.assertFalse(diagnostics["fatal"])
         self.assertEqual(diagnostics["attempt"], 2)
@@ -114,7 +112,10 @@ class TestStartupOutcomeContract(unittest.TestCase):
         lifecycle.mark_required_initialization_started()
         lifecycle.mark_host_waiting(attempt=0, max_attempts=2)
 
-        for attempt, code in ((0, "ATTEMPT_NOT_INCREASING"), (3, "ATTEMPT_OUT_OF_RANGE")):
+        for attempt, code in (
+            (0, "ATTEMPT_NOT_INCREASING"),
+            (3, "ATTEMPT_OUT_OF_RANGE"),
+        ):
             with self.subTest(attempt=attempt):
                 before = lifecycle.snapshot()
                 with self.assertRaises(StartupTransitionError) as ctx:
@@ -185,11 +186,7 @@ class TestStartupWarmupProjection(unittest.TestCase):
         while time.monotonic() < deadline:
             diagnostics = get_startup_diagnostics()
             warmup = next(
-                (
-                    item
-                    for item in diagnostics["warmups"]
-                    if item["name"] == name
-                ),
+                (item for item in diagnostics["warmups"] if item["name"] == name),
                 None,
             )
             if warmup and warmup["state"] == state:
@@ -292,14 +289,10 @@ class TestStartupWarmupProjection(unittest.TestCase):
 
         marker = "PRIVATE_MONITOR_START C:/private/monitor"
         failure = RuntimeError(marker)
-        with patch(
-            "services.startup_lifecycle.threading.Thread"
-        ) as thread_factory:
+        with patch("services.startup_lifecycle.threading.Thread") as thread_factory:
             thread_factory.return_value.start.side_effect = failure
             with self.assertRaises(RuntimeError) as ctx:
-                start_optional_warmups(
-                    [("monitor_provider", lambda: None, 0.01)]
-                )
+                start_optional_warmups([("monitor_provider", lambda: None, 0.01)])
 
         self.assertIs(ctx.exception, failure)
         diagnostics = get_startup_diagnostics()
@@ -323,9 +316,7 @@ class TestStartupWarmupProjection(unittest.TestCase):
         )
 
         with (
-            patch(
-                "services.startup_lifecycle.threading.Thread"
-            ) as thread_factory,
+            patch("services.startup_lifecycle.threading.Thread") as thread_factory,
             self.assertLogs("ComfyUI-OpenClaw", level="WARNING") as captured,
         ):
             thread_factory.return_value.start.side_effect = failure
@@ -334,9 +325,7 @@ class TestStartupWarmupProjection(unittest.TestCase):
         diagnostics = get_startup_diagnostics()
         self.assertTrue(diagnostics["degraded"])
         warmup = next(
-            item
-            for item in diagnostics["warmups"]
-            if item["name"] == "worker_provider"
+            item for item in diagnostics["warmups"] if item["name"] == "worker_provider"
         )
         self.assertEqual(warmup["state"], "failed")
         self.assertNotIn(marker, json.dumps(diagnostics))
@@ -366,7 +355,9 @@ class TestRouteBootstrapOutcomeIntegration(unittest.TestCase):
             release.wait(timeout=1)
 
         with (
-            patch.object(route_bootstrap, "_register_plugins_and_shutdown_hooks") as optional,
+            patch.object(
+                route_bootstrap, "_register_plugins_and_shutdown_hooks"
+            ) as optional,
             patch.object(
                 route_bootstrap,
                 "_initialize_registries_and_security_gate",
@@ -432,9 +423,7 @@ class TestRouteBootstrapOutcomeIntegration(unittest.TestCase):
         self.assertIs(observed[1], failure)
         diagnostics = get_startup_diagnostics()
         self.assertEqual(diagnostics["state"], "fatal")
-        self.assertEqual(
-            diagnostics["reason_code"], "required_initialization_failed"
-        )
+        self.assertEqual(diagnostics["reason_code"], "required_initialization_failed")
         self.assertNotIn(marker, json.dumps(diagnostics))
         self.assertNotIn(marker, "\n".join(captured.output))
 
@@ -551,9 +540,7 @@ class TestRouteBootstrapOutcomeIntegration(unittest.TestCase):
         register.assert_called_once_with(server)
         diagnostics = get_startup_diagnostics()
         self.assertTrue(diagnostics["ready"])
-        self.assertEqual(
-            diagnostics["reason_code"], "route_registration_succeeded"
-        )
+        self.assertEqual(diagnostics["reason_code"], "route_registration_succeeded")
 
         reset_startup_lifecycle_for_tests()
         route_bootstrap.reset_route_bootstrap_for_tests()
@@ -665,9 +652,7 @@ class TestPublicHealthLifecycleProjection(unittest.TestCase):
         )
 
         marker = "PRIVATE_HEALTH_FAILURE C:/private/health"
-        fallback = self._health_payload(
-            diagnostics_side_effect=RuntimeError(marker)
-        )
+        fallback = self._health_payload(diagnostics_side_effect=RuntimeError(marker))
         self.assertEqual(
             tuple(fallback["startup"]),
             STARTUP_DIAGNOSTIC_KEYS,

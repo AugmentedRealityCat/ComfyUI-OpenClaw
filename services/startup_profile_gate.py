@@ -21,7 +21,10 @@ import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple
+
+if TYPE_CHECKING:
+    from .effective_security_posture import EffectiveSecurityPosture
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.startup_profile_gate")
 
@@ -80,12 +83,14 @@ _PROFILE_ENV = "OPENCLAW_DEPLOYMENT_PROFILE"
 
 def _resolve_profile(environ: Optional[Mapping[str, str]] = None) -> str:
     """Resolve the deployment profile from environment."""
-    env = environ or os.environ
+    env = os.environ if environ is None else environ
     return env.get(_PROFILE_ENV, "local").strip().lower()
 
 
 def evaluate_startup_gate(
     environ: Optional[Mapping[str, str]] = None,
+    *,
+    posture: EffectiveSecurityPosture | None = None,
 ) -> StartupGateResult:
     """
     Evaluate the startup profile gate.
@@ -94,7 +99,37 @@ def evaluate_startup_gate(
     override status.
     """
     global _last_gate_result  # noqa: PLW0603
-    env: Mapping[str, str] = environ or os.environ
+    if posture is not None:
+        violation_codes = set(posture.startup_profile_violation_codes)
+        violations = [
+            {
+                "code": check.code,
+                "severity": check.severity,
+                "message": check.message,
+                "remediation": check.remediation,
+            }
+            for check in posture.deployment_checks
+            if check.code in violation_codes
+        ]
+        override_reason = ""
+        if posture.startup_profile_overridden:
+            override_reason = (
+                f"S56: Startup gate bypassed via {_OVERRIDE_ENV}=1. "
+                f"Profile '{posture.deployment_profile}' has "
+                f"{len(violations)} violation(s). "
+                "This override is intended for emergency use only."
+            )
+        result = StartupGateResult(
+            profile=posture.deployment_profile,
+            passed=posture.startup_profile_passed,
+            overridden=posture.startup_profile_overridden,
+            override_reason=override_reason,
+            violations=violations,
+        )
+        _last_gate_result = result
+        return result
+
+    env: Mapping[str, str] = os.environ if environ is None else environ
     profile = _resolve_profile(env)
 
     # Local profile: no enforcement
@@ -149,6 +184,8 @@ def evaluate_startup_gate(
 
 def enforce_startup_gate(
     environ: Optional[Mapping[str, str]] = None,
+    *,
+    posture: EffectiveSecurityPosture | None = None,
 ) -> StartupGateResult:
     """
     Evaluate and enforce the startup profile gate.
@@ -158,7 +195,7 @@ def enforce_startup_gate(
 
     Returns the gate result on success (pass or overridden).
     """
-    result = evaluate_startup_gate(environ)
+    result = evaluate_startup_gate(environ, posture=posture)
 
     if result.passed and not result.overridden:
         logger.info(f"S56: Startup profile gate PASSED for profile '{result.profile}'.")

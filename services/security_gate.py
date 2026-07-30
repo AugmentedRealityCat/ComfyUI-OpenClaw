@@ -5,11 +5,16 @@ Enforces mandatory security controls when running in HARDENED profile.
 Fails startup if critical controls are missing or misconfigured.
 """
 
+from __future__ import annotations
+
 import logging
 import os
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 from .runtime_profile import get_runtime_profile, is_hardened_mode
+
+if TYPE_CHECKING:
+    from .effective_security_posture import EffectiveSecurityPosture
 
 try:
     from .connector_allowlist_posture import evaluate_connector_allowlist_posture
@@ -50,13 +55,25 @@ class SecurityGate:
         return False
 
     @staticmethod
-    def verify_mandatory_controls() -> Tuple[bool, List[str], List[str]]:
+    def verify_mandatory_controls(
+        posture: EffectiveSecurityPosture | None = None,
+    ) -> Tuple[bool, List[str], List[str]]:
         """
         Check if all mandatory controls for the current profile are active.
         Returns: (passed: bool, warnings: List[str], fatal_errors: List[str])
         """
         warnings = []
         fatal_errors = []
+        hardened = (
+            posture.runtime_profile == "hardened"
+            if posture is not None
+            else is_hardened_mode()
+        )
+        runtime_profile_value = (
+            posture.runtime_profile
+            if posture is not None
+            else get_runtime_profile().value
+        )
 
         def _emit_startup_audit(action: str, outcome: str, details: dict) -> None:
             try:
@@ -78,8 +95,12 @@ class SecurityGate:
         # OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN is an explicit operator override for
         # localhost tooling; surfacing it early avoids silent CSRF-boundary drift.
         allow_no_origin = (
-            os.environ.get("OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN", "").strip().lower()
-            == "true"
+            posture.localhost_no_origin_override
+            if posture is not None
+            else (
+                os.environ.get("OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN", "").strip().lower()
+                == "true"
+            )
         )
         if allow_no_origin:
             logger.warning(
@@ -92,7 +113,7 @@ class SecurityGate:
                 details={
                     "env": "OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN",
                     "value": "true",
-                    "profile": get_runtime_profile().value,
+                    "profile": runtime_profile_value,
                 },
             )
 
@@ -100,18 +121,35 @@ class SecurityGate:
         try:
             from .access_control import is_any_token_configured, is_auth_configured
 
-            is_exposed = SecurityGate._check_network_exposure()
+            is_exposed = (
+                posture.network_exposed
+                if posture is not None
+                else SecurityGate._check_network_exposure()
+            )
             # S45 Policy: If exposed, ANY token is sufficient to say "we are not wide open".
             # (Though Admin token is preferred for full protection, basic auth presence satisfies "not accidentally open")
-            auth_ready = is_any_token_configured()
+            auth_ready = (
+                (
+                    posture.admin_token_configured
+                    or posture.observability_token_configured
+                )
+                if posture is not None
+                else is_any_token_configured()
+            )
 
             if is_exposed and not auth_ready:
                 # Check for explicit override
-                from .runtime_config import get_config
+                dangerous_bind_override = (
+                    posture.dangerous_bind_override if posture is not None else None
+                )
+                if dangerous_bind_override is None:
+                    from .runtime_config import get_config
 
-                config = get_config()
+                    dangerous_bind_override = (
+                        get_config().security_dangerous_bind_override
+                    )
 
-                if config.security_dangerous_bind_override:
+                if dangerous_bind_override:
                     warnings.append(
                         "WARNING: Server is exposed (--listen) without Authentication, but override is active.\n"
                         "  This is a DANGEROUS configuration. Remote Code Execution is possible if port is accessible."
@@ -122,7 +160,7 @@ class SecurityGate:
                         details={
                             "reason": "exposed_without_auth",
                             "override": True,
-                            "profile": get_runtime_profile().value,
+                            "profile": runtime_profile_value,
                         },
                     )
                     # Do NOT block startup (S45 Override Contract)
@@ -138,7 +176,12 @@ class SecurityGate:
                 # Loopback + No Auth
                 # Use strict is_auth_configured (Admin) for Hardened profile loopback check?
                 # "HARDENED profile requires Authentication even on loopback."
-                if is_hardened_mode() and not is_auth_configured():
+                admin_ready = (
+                    posture.admin_token_configured
+                    if posture is not None
+                    else is_auth_configured()
+                )
+                if hardened and not admin_ready:
                     warnings.append(
                         "HARDENED profile requires Admin Authentication even on loopback."
                     )
@@ -146,16 +189,24 @@ class SecurityGate:
             warnings.append("Could not import access_control service")
 
         # 2. Egress Policy (SSRF)
-        from .runtime_config import get_config
+        if posture is None:
+            from .runtime_config import get_config
 
-        config = get_config()
+            config = get_config()
+            allow_any_public_llm_host = config.allow_any_public_llm_host
+            allow_insecure_base_url = config.allow_insecure_base_url
+            webhook_auth_mode = config.webhook_auth_mode
+        else:
+            allow_any_public_llm_host = posture.allow_any_public_llm_host
+            allow_insecure_base_url = posture.allow_insecure_base_url
+            webhook_auth_mode = posture.webhook_auth_mode
 
-        if config.allow_any_public_llm_host:
+        if allow_any_public_llm_host:
             warnings.append(
                 "OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST is enabled (Egress check bypassed)"
             )
 
-        if config.allow_insecure_base_url:
+        if allow_insecure_base_url:
             warnings.append(
                 "OPENCLAW_ALLOW_INSECURE_BASE_URL is enabled (SSRF check bypassed)"
             )
@@ -164,7 +215,7 @@ class SecurityGate:
         from .modules import ModuleCapability, is_module_enabled
 
         if is_module_enabled(ModuleCapability.WEBHOOK):
-            if not config.webhook_auth_mode:
+            if webhook_auth_mode == "unset":
                 warnings.append(
                     "Webhook module enabled but OPENCLAW_WEBHOOK_AUTH_MODE not set"
                 )
@@ -206,7 +257,7 @@ class SecurityGate:
         try:
             from .control_plane import enforce_control_plane_startup
 
-            cp_result = enforce_control_plane_startup()
+            cp_result = enforce_control_plane_startup(posture=posture)
             if not cp_result.get("startup_passed", True):
                 for err in cp_result.get("errors", []):
                     fatal_errors.append(f"S62 Control-Plane: {err}")
@@ -216,27 +267,41 @@ class SecurityGate:
             warnings.append("S62 control_plane module failed to import")
 
         # 7. Connector allowlist fail-closed posture (S71)
-        connector_posture = evaluate_connector_allowlist_posture(os.environ)
-        if connector_posture["has_unguarded_connectors"]:
-            deployment_profile = (
-                os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "").strip().lower()
+        if posture is not None:
+            connector_unguarded = list(posture.connector_unguarded_platforms)
+            connector_allowlist_vars = list(
+                posture.connector_recommended_allowlist_vars
             )
-            platforms = ", ".join(connector_posture["unguarded_platforms"])
-            allowlist_vars = ", ".join(connector_posture["recommended_allowlist_vars"])
+        else:
+            connector_posture = evaluate_connector_allowlist_posture(os.environ)
+            connector_unguarded = [
+                str(item) for item in connector_posture["unguarded_platforms"]
+            ]
+            connector_allowlist_vars = [
+                str(item) for item in connector_posture["recommended_allowlist_vars"]
+            ]
+        if connector_unguarded:
+            deployment_profile = (
+                posture.deployment_profile
+                if posture is not None
+                else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "").strip().lower()
+            )
+            platforms = ", ".join(connector_unguarded)
+            allowlist_vars = ", ".join(connector_allowlist_vars)
             msg = (
                 "Connector allowlist coverage missing for active platform(s): "
                 f"{platforms}. Configure allowlists ({allowlist_vars}) before enabling ingress."
             )
 
             # CRITICAL: hardened/public must fail closed for unallowlisted connector ingress.
-            if is_hardened_mode():
+            if hardened:
                 warnings.append(f"S71 (hardened fail-closed): {msg}")
                 _emit_startup_audit(
                     action="startup.connector_allowlist_posture",
                     outcome="error",
                     details={
                         "mode": "hardened",
-                        "unguarded_platforms": connector_posture["unguarded_platforms"],
+                        "unguarded_platforms": connector_unguarded,
                         "deployment_profile": deployment_profile or "unset",
                     },
                 )
@@ -247,7 +312,7 @@ class SecurityGate:
                     outcome="error",
                     details={
                         "mode": "public",
-                        "unguarded_platforms": connector_posture["unguarded_platforms"],
+                        "unguarded_platforms": connector_unguarded,
                     },
                 )
             else:
@@ -257,13 +322,13 @@ class SecurityGate:
                     outcome="warn",
                     details={
                         "mode": "warn_only",
-                        "unguarded_platforms": connector_posture["unguarded_platforms"],
+                        "unguarded_platforms": connector_unguarded,
                         "deployment_profile": deployment_profile or "unset",
                     },
                 )
 
         # In HARDENED mode, treat all warnings as FATAL
-        if is_hardened_mode() and warnings:
+        if hardened and warnings:
             fatal_errors.extend(warnings)
             warnings = []
 
@@ -271,18 +336,26 @@ class SecurityGate:
         return passed, warnings, fatal_errors
 
 
-def enforce_startup_gate() -> None:
+def enforce_startup_gate(
+    posture: EffectiveSecurityPosture | None = None,
+) -> None:
     """
     Run the security gate.
     If in HARDENED mode and checks fail -> Raise SystemExit.
     If in MINIMAL mode and checks fail -> Log warnings.
     """
-    is_hardened = is_hardened_mode()
+    is_hardened = (
+        posture.runtime_profile == "hardened"
+        if posture is not None
+        else is_hardened_mode()
+    )
     mode_str = "HARDENED" if is_hardened else "MINIMAL"
 
     logger.info(f"Running S41 Security Gate ({mode_str} profile)...")
 
-    passed, warnings, fatal_errors = SecurityGate.verify_mandatory_controls()
+    passed, warnings, fatal_errors = SecurityGate.verify_mandatory_controls(
+        posture=posture
+    )
 
     # Log warnings first (non-blocking unless hardened)
     if warnings:

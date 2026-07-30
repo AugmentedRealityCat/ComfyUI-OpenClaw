@@ -15,11 +15,16 @@ Enforcement rule:
 - profile=public + mode=EMBEDDED -> requires explicit override + warning.
 """
 
+from __future__ import annotations
+
 import enum
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from .effective_security_posture import EffectiveSecurityPosture
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +69,24 @@ HIGH_RISK_SURFACES: FrozenSet[Tuple[str, str]] = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def resolve_control_plane_mode(deployment_profile: str = "") -> ControlPlaneMode:
+def _effective_posture(
+    posture: EffectiveSecurityPosture | None = None,
+) -> EffectiveSecurityPosture | None:
+    if posture is not None:
+        return posture
+    try:
+        from .effective_security_posture import get_effective_security_posture
+
+        return get_effective_security_posture(required=False)
+    except ImportError:
+        return None
+
+
+def resolve_control_plane_mode(
+    deployment_profile: str = "",
+    *,
+    posture: EffectiveSecurityPosture | None = None,
+) -> ControlPlaneMode:
     """
     Determine the active control-plane mode.
 
@@ -73,6 +95,10 @@ def resolve_control_plane_mode(deployment_profile: str = "") -> ControlPlaneMode
     2. profile=public defaults to SPLIT.
     3. Everything else defaults to EMBEDDED.
     """
+    effective = _effective_posture(posture)
+    if effective is not None:
+        return ControlPlaneMode(effective.control_plane_mode)
+
     explicit = os.environ.get(ENV_CONTROL_PLANE_MODE, "").lower().strip()
     if explicit == "split":
         return ControlPlaneMode.SPLIT
@@ -86,12 +112,20 @@ def resolve_control_plane_mode(deployment_profile: str = "") -> ControlPlaneMode
     return ControlPlaneMode.EMBEDDED
 
 
-def is_split_mode() -> bool:
+def is_split_mode(*, posture: EffectiveSecurityPosture | None = None) -> bool:
     """Convenience check for split mode."""
+
     from .deployment_profile import evaluate_deployment_profile
 
-    profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
-    return resolve_control_plane_mode(profile) == ControlPlaneMode.SPLIT
+    effective = _effective_posture(posture)
+    profile = (
+        effective.deployment_profile
+        if effective is not None
+        else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
+    )
+    return (
+        resolve_control_plane_mode(profile, posture=effective) == ControlPlaneMode.SPLIT
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +136,8 @@ def is_split_mode() -> bool:
 def get_blocked_surfaces(
     deployment_profile: str,
     mode: Optional[ControlPlaneMode] = None,
+    *,
+    posture: EffectiveSecurityPosture | None = None,
 ) -> List[Tuple[str, str]]:
     """
     Return list of (surface_id, reason) blocked in current configuration.
@@ -109,7 +145,11 @@ def get_blocked_surfaces(
     In public + split: all HIGH_RISK_SURFACES are blocked.
     In embedded or non-public: nothing blocked.
     """
-    if mode is None:
+    effective = _effective_posture(posture)
+    if effective is not None:
+        deployment_profile = effective.deployment_profile
+        mode = ControlPlaneMode(effective.control_plane_mode)
+    elif mode is None:
         mode = resolve_control_plane_mode(deployment_profile)
 
     if deployment_profile == "public" and mode == ControlPlaneMode.SPLIT:
@@ -118,10 +158,19 @@ def get_blocked_surfaces(
     return []
 
 
-def is_surface_blocked(surface_id: str) -> bool:
+def is_surface_blocked(
+    surface_id: str,
+    *,
+    posture: EffectiveSecurityPosture | None = None,
+) -> bool:
     """Check if a specific surface is blocked in current config."""
-    profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
-    blocked = get_blocked_surfaces(profile)
+    effective = _effective_posture(posture)
+    profile = (
+        effective.deployment_profile
+        if effective is not None
+        else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
+    )
+    blocked = get_blocked_surfaces(profile, posture=effective)
     return any(sid == surface_id for sid, _ in blocked)
 
 
@@ -146,7 +195,10 @@ class SplitPrereqReport:
         }
 
 
-def validate_split_prerequisites() -> SplitPrereqReport:
+def validate_split_prerequisites(
+    *,
+    posture: EffectiveSecurityPosture | None = None,
+) -> SplitPrereqReport:
     """
     Validate that all prerequisites for split mode are met.
 
@@ -158,24 +210,38 @@ def validate_split_prerequisites() -> SplitPrereqReport:
     """
     report = SplitPrereqReport()
 
-    url = os.environ.get(ENV_CONTROL_PLANE_URL, "").strip()
-    token = os.environ.get(ENV_CONTROL_PLANE_TOKEN, "").strip()
+    effective = _effective_posture(posture)
+    url_configured = (
+        effective.control_plane_url_configured
+        if effective is not None
+        else bool(os.environ.get(ENV_CONTROL_PLANE_URL, "").strip())
+    )
+    token_configured = (
+        effective.control_plane_token_configured
+        if effective is not None
+        else bool(os.environ.get(ENV_CONTROL_PLANE_TOKEN, "").strip())
+    )
 
-    if not url:
+    if not url_configured:
         report.passed = False
         report.errors.append(
             f"S62: Split mode requires {ENV_CONTROL_PLANE_URL} but it is not set."
         )
 
-    if not token:
+    if not token_configured:
         report.passed = False
         report.errors.append(
             f"S62: Split mode requires {ENV_CONTROL_PLANE_TOKEN} but it is not set."
         )
 
     # Check for compat override (dev-only, auditable)
-    compat = os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip()
-    if compat in ("1", "true", "yes"):
+    compat_override = (
+        effective.control_plane_compat_override
+        if effective is not None
+        else os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip()
+        in ("1", "true", "yes")
+    )
+    if compat_override:
         report.warnings.append(
             "S62: OPENCLAW_SPLIT_COMPAT_OVERRIDE is active. "
             "This bypasses split enforcement and is for dev-only use."
@@ -184,7 +250,10 @@ def validate_split_prerequisites() -> SplitPrereqReport:
     return report
 
 
-def enforce_control_plane_startup() -> Dict:
+def enforce_control_plane_startup(
+    *,
+    posture: EffectiveSecurityPosture | None = None,
+) -> Dict:
     """
     Run control-plane startup validation.
 
@@ -196,12 +265,18 @@ def enforce_control_plane_startup() -> Dict:
 
     Returns diagnostic dict for startup report.
     """
-    profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
-    mode = resolve_control_plane_mode(profile)
-    compat_override = os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip() in (
-        "1",
-        "true",
-        "yes",
+    effective = _effective_posture(posture)
+    profile = (
+        effective.deployment_profile
+        if effective is not None
+        else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
+    )
+    mode = resolve_control_plane_mode(profile, posture=effective)
+    compat_override = (
+        effective.control_plane_compat_override
+        if effective is not None
+        else os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip()
+        in ("1", "true", "yes")
     )
 
     result: Dict = {
@@ -209,7 +284,7 @@ def enforce_control_plane_startup() -> Dict:
         "control_plane_mode": mode.value,
         "blocked_surfaces": [
             {"id": sid, "reason": desc}
-            for sid, desc in get_blocked_surfaces(profile, mode)
+            for sid, desc in get_blocked_surfaces(profile, mode, posture=effective)
         ],
         "startup_passed": True,
         "errors": [],
@@ -217,7 +292,7 @@ def enforce_control_plane_startup() -> Dict:
     }
 
     if profile == "public" and mode == ControlPlaneMode.SPLIT:
-        prereq = validate_split_prerequisites()
+        prereq = validate_split_prerequisites(posture=effective)
         if not prereq.passed:
             result["startup_passed"] = False
             result["errors"] = prereq.errors

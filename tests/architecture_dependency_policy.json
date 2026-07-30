@@ -198,6 +198,7 @@
       "services/deployment_profile.py",
       "services/diagnostics_flags.py",
       "services/effective_config.py",
+      "services/effective_security_posture.py",
       "services/endpoint_manifest.py",
       "services/execution_budgets.py",
       "services/failover.py",

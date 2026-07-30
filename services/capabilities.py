@@ -26,6 +26,15 @@ from .runtime_profile import get_runtime_profile
 API_VERSION = 1
 
 
+def _get_installed_posture():
+    try:
+        from .effective_security_posture import get_effective_security_posture
+
+        return get_effective_security_posture(required=False)
+    except ImportError:
+        return None
+
+
 def _get_control_plane_info() -> dict:
     """Build control-plane status for capabilities response."""
     try:
@@ -33,9 +42,14 @@ def _get_control_plane_info() -> dict:
 
         from .control_plane import get_blocked_surfaces, resolve_control_plane_mode
 
-        profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
-        mode = resolve_control_plane_mode(profile)
-        blocked = get_blocked_surfaces(profile, mode)
+        posture = _get_installed_posture()
+        profile = (
+            posture.deployment_profile
+            if posture is not None
+            else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local")
+        )
+        mode = resolve_control_plane_mode(profile, posture=posture)
+        blocked = get_blocked_surfaces(profile, mode, posture=posture)
         info = {
             "mode": mode.value,
             "blocked_surfaces": [sid for sid, _ in blocked],
@@ -59,9 +73,14 @@ def get_capabilities() -> dict:
     Return capability surface for frontend probing.
     """
     cp_info = _get_control_plane_info()
+    posture = _get_installed_posture()
     result = {
         "api_version": API_VERSION,
-        "runtime_profile": get_runtime_profile().value,
+        "runtime_profile": (
+            posture.runtime_profile
+            if posture is not None
+            else get_runtime_profile().value
+        ),
         "control_plane": cp_info,
         "pack": {
             "name": PACK_NAME,

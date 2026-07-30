@@ -39,13 +39,21 @@ def resolve_scheduler_execution_mode(config: Optional[dict] = None) -> str:
     if explicit in {SCHEDULER_EXECUTION_EMBEDDED, SCHEDULER_EXECUTION_DELEGATED}:
         return explicit
 
-    profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local").strip().lower()
     try:
         from ..control_plane import ControlPlaneMode, resolve_control_plane_mode
+        from ..effective_security_posture import get_effective_security_posture
+
+        posture = get_effective_security_posture(required=False)
+        profile = (
+            posture.deployment_profile
+            if posture is not None
+            else os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local").strip().lower()
+        )
 
         if (
             profile == "public"
-            and resolve_control_plane_mode(profile) == ControlPlaneMode.SPLIT
+            and resolve_control_plane_mode(profile, posture=posture)
+            == ControlPlaneMode.SPLIT
         ):
             return SCHEDULER_EXECUTION_DELEGATED
     except Exception:

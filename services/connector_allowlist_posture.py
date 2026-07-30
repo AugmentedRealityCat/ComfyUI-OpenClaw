@@ -100,7 +100,9 @@ def _dedupe_keep_order(values: list[str]) -> list[str]:
 def evaluate_connector_allowlist_posture(
     environ: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
-    env: Mapping[str, str] = environ or os.environ
+    # IMPORTANT: an explicit empty mapping is an empty posture fixture, not a request
+    # to fall back to ambient process state.
+    env: Mapping[str, str] = os.environ if environ is None else environ
 
     active_platforms: list[str] = []
     unguarded_platforms: list[str] = []
@@ -154,7 +156,7 @@ def evaluate_connector_allowlist_posture(
 def is_strict_connector_allowlist_profile(
     environ: Optional[Mapping[str, str]] = None,
 ) -> bool:
-    env: Mapping[str, str] = environ or os.environ
+    env: Mapping[str, str] = os.environ if environ is None else environ
     deployment_profile = (env.get("OPENCLAW_DEPLOYMENT_PROFILE") or "").strip().lower()
     runtime_profile = (env.get("OPENCLAW_RUNTIME_PROFILE") or "").strip().lower()
     return deployment_profile == "public" or runtime_profile == "hardened"

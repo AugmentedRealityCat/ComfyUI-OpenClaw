@@ -153,6 +153,16 @@ def _initialize_registries_and_security_gate() -> None:
         config = get_config()
         ServiceRegistry.register(SVC_RUNTIME_CONFIG, config)
 
+        from .effective_security_posture import (
+            get_effective_security_posture,
+            resolve_effective_security_posture,
+        )
+
+        posture = get_effective_security_posture(required=False)
+        if posture is None:
+            # Direct compatibility/test invocation does not own process installation.
+            posture = resolve_effective_security_posture()
+
         # Always-on modules
         enable_module(ModuleCapability.CORE)
         enable_module(ModuleCapability.SECURITY)
@@ -184,7 +194,7 @@ def _initialize_registries_and_security_gate() -> None:
 
         from .security_gate import enforce_startup_gate
 
-        enforce_startup_gate()
+        enforce_startup_gate(posture=posture)
     except Exception as exc:
         logging.getLogger("ComfyUI-OpenClaw").error(
             "Required registry initialization failed (error_type=%s)",
@@ -347,6 +357,15 @@ def reset_route_bootstrap_for_tests() -> None:
         _registration_error = None
         _registration_retry_thread = None
         _registration_condition.notify_all()
+    try:
+        from .effective_security_posture import (
+            reset_effective_security_posture_for_tests,
+        )
+
+        reset_effective_security_posture_for_tests()
+    except ImportError:
+        # Dependency-light test/import mode may omit the posture module.
+        pass
 
 
 def _store_registration_success(*, generation: int | None = None) -> bool:
@@ -512,6 +531,11 @@ def register_routes_once() -> None:
         generation = _registration_generation
 
     try:
+        from .effective_security_posture import get_or_create_effective_security_posture
+
+        # CRITICAL: this required startup owner installs process-static posture once.
+        # Direct helper/API invocations resolve ephemeral snapshots instead.
+        get_or_create_effective_security_posture()
         _mark_required_initialization_started()
         try:
             _register_plugins_and_shutdown_hooks()

@@ -336,15 +336,22 @@ def is_secret_write_blocked() -> bool:
     """
     try:
         from .control_plane import is_split_mode
+        from .effective_security_posture import get_effective_security_posture
     except ImportError:
         return False
 
-    if not is_split_mode():
+    posture = get_effective_security_posture(required=False)
+    if not is_split_mode(posture=posture):
         return False
 
     # Check override
-    compat = os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip()
-    if compat in ("1", "true", "yes"):
+    compat_override = (
+        posture.control_plane_compat_override
+        if posture is not None
+        else os.environ.get(ENV_SPLIT_COMPAT_OVERRIDE, "").lower().strip()
+        in ("1", "true", "yes")
+    )
+    if compat_override:
         logger.warning("S57: Secret write override active in split mode (DEV ONLY)")
         return False
 

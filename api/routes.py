@@ -594,6 +594,22 @@ def register_dual_route(server, method: str, path: str, handler) -> None:
 
 
 def _resolve_mae_profile() -> str:
+    try:
+        if __package__ and "." in __package__:
+            from ..services.effective_security_posture import (
+                get_effective_security_posture,
+            )
+        else:
+            from services.effective_security_posture import (
+                get_effective_security_posture,
+            )
+        posture = get_effective_security_posture(required=False)
+        if posture is not None:
+            return str(posture.mae_profile)
+    except ImportError:
+        # IMPORTANT: dependency-light import mode retains the accepted resolver below.
+        pass
+
     profile = os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "local").strip().lower()
     if profile in {"public", "hardened"}:
         return profile
@@ -627,11 +643,23 @@ def register_routes(server) -> None:
     # Must run BEFORE any route or worker registration.
     try:
         try:
+            from ..services.effective_security_posture import (
+                get_effective_security_posture,
+                resolve_effective_security_posture,
+            )
             from ..services.startup_profile_gate import enforce_startup_gate
         except (ImportError, ValueError):
+            from services.effective_security_posture import (
+                get_effective_security_posture,
+                resolve_effective_security_posture,
+            )
             from services.startup_profile_gate import enforce_startup_gate
 
-        enforce_startup_gate()
+        posture = get_effective_security_posture(required=False)
+        if posture is None:
+            # Compatibility/direct-test invocation is not the process owner.
+            posture = resolve_effective_security_posture()
+        enforce_startup_gate(posture=posture)
     except RuntimeError:
         # CRITICAL: fail-closed. Never continue route registration after S56
         # startup gate failure.
