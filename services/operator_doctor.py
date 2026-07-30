@@ -288,6 +288,7 @@ def check_compatibility_matrix_governance(
     - OPENCLAW_COMPAT_ANCHOR_COMFYUI
     - OPENCLAW_COMPAT_ANCHOR_COMFYUI_FRONTEND
     - OPENCLAW_COMPAT_ANCHOR_DESKTOP
+    - OPENCLAW_COMPAT_ANCHOR_COMFY_DESKTOP
     """
     matrix_path = pack_root / "docs" / "release" / "compatibility_matrix.md"
     if not matrix_path.exists():
@@ -325,10 +326,12 @@ def check_compatibility_matrix_governance(
         comfyui=os.environ.get("OPENCLAW_COMPAT_ANCHOR_COMFYUI"),
         comfyui_frontend=os.environ.get("OPENCLAW_COMPAT_ANCHOR_COMFYUI_FRONTEND"),
         desktop=os.environ.get("OPENCLAW_COMPAT_ANCHOR_DESKTOP"),
+        comfy_desktop=os.environ.get("OPENCLAW_COMPAT_ANCHOR_COMFY_DESKTOP"),
     )
     drift = detect_anchor_drift((doc.get("metadata") or {}).get("anchors"), observed)
     host_contract = build_host_surface_contract(
-        (doc.get("metadata") or {}).get("anchors")
+        (doc.get("metadata") or {}).get("anchors"),
+        published_surfaces=(doc.get("metadata") or {}).get("host_surfaces"),
     )
 
     report.environment["compat_matrix_validation_code"] = str(
@@ -345,6 +348,14 @@ def check_compatibility_matrix_governance(
             .get("frontend_parity", {})
             .get("status", "")
         )
+    )
+    report.environment["compat_comfy_desktop_generation"] = str(
+        host_contract.get("surfaces", {}).get("comfy_desktop", {}).get("generation", "")
+    )
+    report.environment["compat_comfy_desktop_hosted_version_mode"] = str(
+        host_contract.get("surfaces", {})
+        .get("comfy_desktop", {})
+        .get("hosted_version_mode", "")
     )
 
     if not validation.get("ok"):
@@ -412,20 +423,22 @@ def check_compatibility_matrix_governance(
                     host_contract.get("violations", []), ensure_ascii=False
                 ),
                 remediation=(
-                    "Record the desktop bundle anchor in the expected "
-                    "`<desktop> (core <core> / frontend <frontend>)` format."
+                    "Record both Desktop generations: the legacy "
+                    "`<desktop> (core <core> / frontend <frontend>)` bundle and the "
+                    "current `<app> (<revision> / <describe>)` managed-install anchor."
                 ),
             )
         )
     else:
         desktop_surface = host_contract["surfaces"]["desktop"]
+        current_desktop_surface = host_contract["surfaces"]["comfy_desktop"]
         parity = desktop_surface["frontend_parity"]
         report.add(
             CheckResult(
                 name="compatibility_matrix_host_surface_contract",
                 severity=Severity.PASS.value,
                 message=(
-                    "Desktop host surface tracked separately "
+                    "Desktop host generations tracked separately "
                     f"({parity['status']} vs standalone frontend)"
                 ),
                 detail=json.dumps(
@@ -437,6 +450,16 @@ def check_compatibility_matrix_governance(
                         ],
                         "reference_frontend_version": parity[
                             "reference_frontend_version"
+                        ],
+                        "comfy_desktop_anchor": current_desktop_surface["anchor"],
+                        "comfy_desktop_version": current_desktop_surface[
+                            "desktop_version"
+                        ],
+                        "comfy_desktop_generation": current_desktop_surface[
+                            "generation"
+                        ],
+                        "comfy_desktop_hosted_version_mode": current_desktop_surface[
+                            "hosted_version_mode"
                         ],
                     },
                     ensure_ascii=False,

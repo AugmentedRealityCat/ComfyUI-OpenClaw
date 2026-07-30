@@ -18,7 +18,7 @@
 - **Environment**: macOS, older Windows versions.
 - **Python**: 3.12.
 - **ComfyUI**: nightly builds and farther-from-anchor upstream drift.
-- **Desktop host**: desktop bundle variants outside the current recorded desktop anchor, including cases where the embedded frontend lags standalone frontend.
+- **Desktop host**: legacy fixed-bundle variants outside the recorded legacy anchor and current managed-install variants whose installed host components fall outside their own supported anchors.
 
 ### Tier 3: Unsupported
 
@@ -35,8 +35,9 @@
 ## Compatibility Anchor Policy
 
 - The authoritative compatibility reference points are recorded in [`compatibility_matrix.md`](compatibility_matrix.md).
-- `ComfyUI`, standalone `ComfyUI_frontend`, and `desktop` are tracked as separate host surfaces.
-- Desktop should not be assumed to match standalone frontend HEAD; the embedded frontend version may intentionally lag and must be evaluated against its own recorded bundle anchor.
+- `ComfyUI`, standalone `ComfyUI_frontend`, legacy `desktop`, and current `comfy_desktop` are tracked as separate anchors.
+- Legacy Desktop is a fixed bundle and must be evaluated against its recorded core/frontend versions.
+- Current Comfy-Desktop is a managed-install generation; hosted ComfyUI and frontend versions are installation-specific and must not be inferred from the application version.
 - Upstream reference refreshes should update the matrix anchors before being treated as the new default support baseline.
 
 ## Reporting Issues

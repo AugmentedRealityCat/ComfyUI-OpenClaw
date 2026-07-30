@@ -26,7 +26,13 @@ test.describe('Desktop host parity lane', () => {
     const host = page.locator('#sidebar-tab-comfyui-openclaw');
     await expect(host).toHaveAttribute('data-openclaw-host-surface', 'standalone_frontend');
     await expect(host).toHaveAttribute('data-openclaw-desktop-host', 'false');
-    await expect(host).toHaveAttribute('data-openclaw-reference-frontend', '1.48.1');
+    await expect(host).toHaveAttribute('data-openclaw-reference-frontend', '1.49.1');
+    await expect(host).toHaveAttribute('data-openclaw-current-desktop-version', '1.0.32-rc.1');
+    await expect(host).toHaveAttribute('data-openclaw-current-desktop-generation', 'managed_install');
+    await expect(host).toHaveAttribute(
+      'data-openclaw-current-desktop-hosted-version-mode',
+      'installation_specific',
+    );
   });
 
   test('boots the sidebar under desktop host signals and keeps approvals interactive', async ({ page }) => {
@@ -38,7 +44,13 @@ test.describe('Desktop host parity lane', () => {
     const host = page.locator('#sidebar-tab-comfyui-openclaw');
     await expect(host).toHaveAttribute('data-openclaw-host-surface', 'desktop');
     await expect(host).toHaveAttribute('data-openclaw-desktop-host', 'true');
-    await expect(host).toHaveAttribute('data-openclaw-reference-frontend', '1.48.1');
+    await expect(host).toHaveAttribute('data-openclaw-reference-frontend', '1.49.1');
+    await expect(host).toHaveAttribute('data-openclaw-current-desktop-version', '1.0.32-rc.1');
+    await expect(host).toHaveAttribute('data-openclaw-current-desktop-generation', 'managed_install');
+    await expect(host).toHaveAttribute(
+      'data-openclaw-current-desktop-hosted-version-mode',
+      'installation_specific',
+    );
     await expect(host).toHaveAttribute('data-openclaw-desktop-version', '0.9.4');
     await expect(host).toHaveAttribute('data-openclaw-desktop-core-version', '0.22.3');
     await expect(host).toHaveAttribute('data-openclaw-desktop-embedded-frontend', '1.43.18');
@@ -58,7 +70,19 @@ test.describe('Desktop host parity lane', () => {
 
     await expect(page.locator('body')).toHaveAttribute('data-openclaw-host-surface', 'desktop');
     await expect(page.locator('body')).toHaveAttribute('data-openclaw-desktop-host', 'true');
-    await expect(page.locator('body')).toHaveAttribute('data-openclaw-reference-frontend', '1.48.1');
+    await expect(page.locator('body')).toHaveAttribute('data-openclaw-reference-frontend', '1.49.1');
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-openclaw-current-desktop-version',
+      '1.0.32-rc.1',
+    );
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-openclaw-current-desktop-generation',
+      'managed_install',
+    );
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-openclaw-current-desktop-hosted-version-mode',
+      'installation_specific',
+    );
     await expect(page.locator('body')).toHaveAttribute('data-openclaw-desktop-version', '0.9.4');
     await expect(page.locator('body')).toHaveAttribute('data-openclaw-desktop-core-version', '0.22.3');
     await expect(page.locator('body')).toHaveAttribute('data-openclaw-desktop-embedded-frontend', '1.43.18');
@@ -68,5 +92,36 @@ test.describe('Desktop host parity lane', () => {
     await page.locator('#refreshApprovals').click();
     await expect(page.locator('#approvalsList')).toContainText('apr-r166-001', { timeout: 15000 });
     await expect(page.locator('#approvalsList')).toContainText('desktop_host_smoke', { timeout: 15000 });
+  });
+
+  test('publishes current managed-install Desktop metadata without activating bridge detection', async ({ page }) => {
+    await mockComfyUiCore(page, { hostSurface: 'standalone_frontend' });
+    await page.goto('test-harness.html');
+    await waitForOpenClawReady(page);
+
+    const evidence = await page.evaluate(async () => {
+      const {
+        HOST_SURFACES,
+        HOST_SURFACE_REFERENCES,
+        resolveHostSurface,
+      } = await import('/web/openclaw_host_surface.js');
+      return {
+        reference: HOST_SURFACE_REFERENCES[HOST_SURFACES.comfyDesktop],
+        resolvedSurface: resolveHostSurface({ win: { __comfyDesktop2: {} } }),
+      };
+    });
+
+    expect(evidence).toEqual({
+      reference: {
+        desktopVersion: '1.0.32-rc.1',
+        sourceRevision: '85e28b7a',
+        sourceDescribe: 'v1.0.32-rc.1-3-g85e28b7',
+        generation: 'managed_install',
+        hostedVersionMode: 'installation_specific',
+        coreVersion: null,
+        frontendVersion: null,
+      },
+      resolvedSurface: 'standalone_frontend',
+    });
   });
 });

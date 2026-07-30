@@ -55,7 +55,12 @@ def main() -> int:
     parser.add_argument(
         "--anchor-desktop",
         default=None,
-        help="Observed ComfyUI Desktop anchor/version (optional)",
+        help="Observed legacy ComfyUI Desktop anchor/version (optional)",
+    )
+    parser.add_argument(
+        "--anchor-comfy-desktop",
+        default=None,
+        help="Observed current Comfy-Desktop anchor/version (optional)",
     )
     parser.add_argument(
         "--updated-by",
@@ -88,6 +93,7 @@ def main() -> int:
         comfyui=args.anchor_comfyui,
         comfyui_frontend=args.anchor_frontend,
         desktop=args.anchor_desktop,
+        comfy_desktop=args.anchor_comfy_desktop,
     )
     result = run_refresh_workflow(
         matrix_path=args.matrix_path,

@@ -3,22 +3,39 @@
 ```openclaw-compat-matrix-meta
 {
   "anchors": {
-    "comfyui": "1377a2f7 (v0.27.0-47-g1377a2f7 / pyproject 0.27.0)",
-    "comfyui_frontend": "1.48.1 (ceb5ae1eba / v1.48.1-1-gceb5ae1eba)",
+    "comfy_desktop": "1.0.32-rc.1 (85e28b7a / v1.0.32-rc.1-3-g85e28b7)",
+    "comfyui": "9cf91339 (v0.29.0-12-g9cf91339 / pyproject 0.29.0)",
+    "comfyui_frontend": "1.49.1 (4b3866b838 / v1.49.1-19-g4b3866b838)",
     "desktop": "0.9.4 (core 0.22.3 / frontend 1.43.18)"
   },
   "evidence": {
-    "evidence_id": "compat-matrix-refresh-20260710",
-    "updated_at": "2026-07-10T15:50:42+00:00",
-    "updated_by": "host-reference-refresh"
+    "evidence_id": "compat-matrix-refresh-20260731",
+    "updated_at": "2026-07-31T04:03:00+08:00",
+    "updated_by": "host-reference-alignment"
   },
-  "last_validated_date": "2026-07-10",
-  "matrix_version": "v0.2.8",
+  "host_surfaces": {
+    "comfy_desktop": {
+      "anchor_key": "comfy_desktop",
+      "core_version": null,
+      "frontend_version": null,
+      "generation": "managed_install",
+      "hosted_version_mode": "installation_specific"
+    },
+    "desktop": {
+      "anchor_key": "desktop",
+      "core_version": "0.22.3",
+      "frontend_version": "1.43.18",
+      "generation": "legacy_fixed_bundle",
+      "hosted_version_mode": "fixed"
+    }
+  },
+  "last_validated_date": "2026-07-30",
+  "matrix_version": "v0.2.9",
   "policy": {
     "max_age_days": 45,
     "warn_age_days": 30
   },
-  "schema_version": 1
+  "schema_version": 2
 }
 ```
 
@@ -28,9 +45,10 @@ This document tracks the current reference anchors and validated environments fo
 
 | Component | Validated Range | Best Effort / Experimental | Notes |
 | :--- | :--- | :--- | :--- |
-| **ComfyUI** | `1377a2f7` reference anchor (`v0.27.0-47-g1377a2f7`; `pyproject.toml` version `0.27.0`) | Older tagged snapshots | Current local upstream reference repo snapshot used for compatibility review |
-| **ComfyUI Frontend** | `1.48.1` reference anchor (`ceb5ae1eba`; `v1.48.1-1-gceb5ae1eba`) | Minor drift around the anchor | Sidebar extension contract remains compatible; prefer the current sidebar store API with deprecated facade fallback |
-| **ComfyUI Desktop** | `0.9.4 (core 0.22.3 / frontend 1.43.18)` reference anchor | Desktop bundle may lag standalone frontend | Treat desktop parity as a distinct host surface, not an alias of standalone frontend HEAD |
+| **ComfyUI** | `9cf91339` reference anchor (`v0.29.0-12-g9cf91339`; `pyproject.toml` version `0.29.0`) | Older tagged snapshots | Current local upstream reference repo snapshot used for compatibility review |
+| **ComfyUI Frontend** | `1.49.1` reference anchor (`4b3866b838`; `v1.49.1-19-g4b3866b838`) | Minor drift around the anchor | Sidebar extension contract remains compatible; prefer the current sidebar store API with deprecated facade fallback |
+| **Legacy Desktop** | `0.9.4 (core 0.22.3 / frontend 1.43.18)` reference anchor | Legacy fixed bundle may lag standalone frontend | Preserve the recorded fixed-bundle contract for existing parity coverage |
+| **Current Comfy-Desktop** | `1.0.32-rc.1` reference anchor (`85e28b7a`; `v1.0.32-rc.1-3-g85e28b7`) | Hosted component versions vary by installation | Treat the managed-install generation separately; do not infer fixed core/frontend versions from the application release |
 | **Python** | 3.10, 3.11, 3.12 | 3.9 | 3.13 not yet validated |
 | **Torch** | 2.1.2+ | 1.13+ | CUDA 11.8/12.1 verified |
 
@@ -38,7 +56,8 @@ This document tracks the current reference anchors and validated environments fo
 
 - **ComfyUI host runtime**: current bootstrap assumptions remain aligned with upstream `PromptServer` startup and route registration flow, including `/api`-prefixed canonical API routing.
 - **Frontend host surface**: current sidebar integration contract remains compatible with the standalone frontend reference anchor, while inactive subgraph diagnostics and promoted-widget behavior remain regression-sensitive seams.
-- **Desktop host surface**: desktop currently embeds frontend `1.43.18`, which still lags the standalone frontend `1.48.1` reference. Validate desktop-specific behavior against the desktop anchor instead of assuming standalone-frontend parity.
+- **Legacy Desktop host surface**: Desktop `0.9.4` embeds frontend `1.43.18`, which lags the standalone frontend `1.49.1` reference. Validate this fixed bundle against its own anchor.
+- **Current Comfy-Desktop host surface**: application `1.0.32-rc.1` is a managed-install generation. Its hosted ComfyUI and frontend versions are `installation_specific`; the application anchor must not be cross-wired into fixed hosted-version claims.
 
 ## Residual Host-Contract Decisions
 

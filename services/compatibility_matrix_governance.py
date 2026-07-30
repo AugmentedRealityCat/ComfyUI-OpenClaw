@@ -19,15 +19,42 @@ from typing import Any, Dict, List, Optional, Tuple
 META_BLOCK_TAG = "openclaw-compat-matrix-meta"
 DEFAULT_WARN_AGE_DAYS = 30
 DEFAULT_MAX_AGE_DAYS = 45
-ANCHOR_KEYS = ("comfyui", "comfyui_frontend", "desktop")
+CURRENT_SCHEMA_VERSION = 2
+ANCHOR_KEYS = ("comfyui", "comfyui_frontend", "desktop", "comfy_desktop")
+DEFAULT_HOST_SURFACES: dict[str, dict[str, Any]] = {
+    "desktop": {
+        "generation": "legacy_fixed_bundle",
+        "anchor_key": "desktop",
+        "hosted_version_mode": "fixed",
+        "core_version": "0.22.3",
+        "frontend_version": "1.43.18",
+    },
+    "comfy_desktop": {
+        "generation": "managed_install",
+        "anchor_key": "comfy_desktop",
+        "hosted_version_mode": "installation_specific",
+        "core_version": None,
+        "frontend_version": None,
+    },
+}
 
 META_BLOCK_RE = re.compile(
     r"```" + re.escape(META_BLOCK_TAG) + r"\s*\n(?P<body>.*?)\n```",
     re.DOTALL,
 )
 SEMVER_RE = re.compile(r"(?P<version>\d+\.\d+\.\d+)")
+COMFYUI_ANCHOR_RE = re.compile(
+    r"^[0-9a-fA-F]{7,40}\s+\(v[^\s/]+\s+/\s+pyproject\s+\d+\.\d+\.\d+\)$"
+)
+FRONTEND_ANCHOR_RE = re.compile(
+    r"^\d+\.\d+\.\d+\s+\([0-9a-fA-F]{7,40}\s+/\s+v[^\s)]+\)$"
+)
 DESKTOP_ANCHOR_RE = re.compile(
     r"^(?P<desktop>\d+\.\d+\.\d+)\s+\(core\s+(?P<core>\d+\.\d+\.\d+)\s+/\s+frontend\s+(?P<frontend>\d+\.\d+\.\d+)\)$"
+)
+COMFY_DESKTOP_ANCHOR_RE = re.compile(
+    r"^(?P<desktop>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s+"
+    r"\((?P<revision>[0-9a-fA-F]{7,40})\s+/\s+(?P<describe>v[^\s)]+)\)$"
 )
 
 
@@ -54,7 +81,7 @@ def _json_hash(payload: Any) -> str:
 def _default_metadata() -> Dict[str, Any]:
     today = _today_iso()
     return {
-        "schema_version": 1,
+        "schema_version": CURRENT_SCHEMA_VERSION,
         "matrix_version": "v0.2.1",
         "last_validated_date": today,
         "policy": {
@@ -62,6 +89,7 @@ def _default_metadata() -> Dict[str, Any]:
             "max_age_days": DEFAULT_MAX_AGE_DAYS,
         },
         "anchors": {key: "unknown" for key in ANCHOR_KEYS},
+        "host_surfaces": copy.deepcopy(DEFAULT_HOST_SURFACES),
         "evidence": {
             "evidence_id": f"compat-matrix-{today.replace('-', '')}",
             "updated_at": _utc_now().isoformat(),
@@ -149,7 +177,14 @@ def validate_metadata(
         }
 
     schema_version = metadata.get("schema_version")
-    if schema_version != 1:
+    if schema_version == 1:
+        violations.append(
+            {
+                "code": "R90_META_SCHEMA_UPGRADE_REQUIRED",
+                "message": "schema_version 1 must be refreshed to schema_version 2",
+            }
+        )
+    elif schema_version != CURRENT_SCHEMA_VERSION:
         violations.append(
             {
                 "code": "R90_META_SCHEMA_VERSION",
@@ -205,12 +240,104 @@ def validate_metadata(
             {"code": "R90_META_ANCHORS", "message": "Missing anchors object"}
         )
     else:
+        unknown_anchor_keys = sorted(set(anchors) - set(ANCHOR_KEYS))
+        for key in unknown_anchor_keys:
+            violations.append(
+                {
+                    "code": "R90_META_ANCHOR_UNKNOWN",
+                    "message": f"Unknown anchor key: {key}",
+                }
+            )
+        anchor_patterns = {
+            "comfyui": COMFYUI_ANCHOR_RE,
+            "comfyui_frontend": FRONTEND_ANCHOR_RE,
+            "desktop": DESKTOP_ANCHOR_RE,
+            "comfy_desktop": COMFY_DESKTOP_ANCHOR_RE,
+        }
         for key in ANCHOR_KEYS:
             if key not in anchors:
                 violations.append(
                     {
                         "code": "R90_META_ANCHOR_MISSING",
                         "message": f"Missing anchors.{key}",
+                    }
+                )
+            elif not isinstance(anchors[key], str) or not anchors[key].strip():
+                violations.append(
+                    {
+                        "code": "R90_META_ANCHOR_INVALID",
+                        "message": f"Invalid anchors.{key}",
+                    }
+                )
+            elif anchors[key].strip() == "unknown":
+                violations.append(
+                    {
+                        "code": "R90_META_ANCHOR_UNRESOLVED",
+                        "message": f"Unresolved anchors.{key}",
+                    }
+                )
+            elif anchor_patterns[key].match(anchors[key].strip()) is None:
+                violations.append(
+                    {
+                        "code": "R90_META_ANCHOR_FORMAT",
+                        "message": f"Malformed anchors.{key}",
+                    }
+                )
+
+    if schema_version == CURRENT_SCHEMA_VERSION:
+        host_surfaces = metadata.get("host_surfaces")
+        if not isinstance(host_surfaces, dict):
+            host_surfaces = {}
+            violations.append(
+                {
+                    "code": "R90_META_HOST_SURFACES",
+                    "message": "Missing host_surfaces object",
+                }
+            )
+        for surface_name, expected in DEFAULT_HOST_SURFACES.items():
+            surface = host_surfaces.get(surface_name)
+            if not isinstance(surface, dict):
+                violations.append(
+                    {
+                        "code": "R90_META_HOST_SURFACE_MISSING",
+                        "message": f"Missing host_surfaces.{surface_name}",
+                    }
+                )
+                continue
+            for field_name in ("generation", "anchor_key", "hosted_version_mode"):
+                if surface.get(field_name) != expected[field_name]:
+                    violations.append(
+                        {
+                            "code": "R90_META_HOST_SURFACE_CONTRACT",
+                            "message": (
+                                f"host_surfaces.{surface_name}.{field_name} does not "
+                                "match the supported generation contract"
+                            ),
+                        }
+                    )
+            if surface_name == "desktop":
+                for field_name in ("core_version", "frontend_version"):
+                    if surface.get(field_name) != expected[field_name]:
+                        violations.append(
+                            {
+                                "code": "R90_META_HOST_SURFACE_CONTRACT",
+                                "message": (
+                                    f"host_surfaces.desktop.{field_name} must match "
+                                    "the fixed legacy bundle"
+                                ),
+                            }
+                        )
+            elif (
+                surface.get("core_version") is not None
+                or surface.get("frontend_version") is not None
+            ):
+                violations.append(
+                    {
+                        "code": "R90_META_HOST_SURFACE_VERSION_MODE",
+                        "message": (
+                            "Managed-install Desktop hosted versions must remain "
+                            "installation-specific"
+                        ),
                     }
                 )
 
@@ -256,11 +383,13 @@ def normalize_observed_anchors(
     comfyui: Optional[str] = None,
     comfyui_frontend: Optional[str] = None,
     desktop: Optional[str] = None,
+    comfy_desktop: str | None = None,
 ) -> Dict[str, str]:
     return {
         "comfyui": (comfyui or "").strip() or "unknown",
         "comfyui_frontend": (comfyui_frontend or "").strip() or "unknown",
         "desktop": (desktop or "").strip() or "unknown",
+        "comfy_desktop": (comfy_desktop or "").strip() or "unknown",
     }
 
 
@@ -295,16 +424,27 @@ def _compare_semver(left: Optional[str], right: Optional[str]) -> Optional[int]:
 
 def build_host_surface_contract(
     published_anchors: Optional[Dict[str, Any]],
+    *,
+    published_surfaces: dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     anchors = dict(published_anchors or {})
+    surface_contracts = copy.deepcopy(
+        published_surfaces
+        if isinstance(published_surfaces, dict)
+        else DEFAULT_HOST_SURFACES
+    )
     standalone_anchor = str(anchors.get("comfyui_frontend", "unknown"))
     desktop_anchor = str(anchors.get("desktop", "unknown"))
+    comfy_desktop_anchor = str(anchors.get("comfy_desktop", "unknown"))
     standalone_frontend_version = _extract_semver(standalone_anchor)
 
     desktop_match = DESKTOP_ANCHOR_RE.match(desktop_anchor)
     desktop_version = None
     desktop_core_version = None
     desktop_embedded_frontend_version = None
+    comfy_desktop_version = None
+    comfy_desktop_revision = None
+    comfy_desktop_describe = None
     violations: List[Dict[str, str]] = []
 
     if desktop_anchor != "unknown" and desktop_match is None:
@@ -318,6 +458,73 @@ def build_host_surface_contract(
         desktop_version = desktop_match.group("desktop")
         desktop_core_version = desktop_match.group("core")
         desktop_embedded_frontend_version = desktop_match.group("frontend")
+
+    legacy_surface = surface_contracts.get("desktop")
+    if not isinstance(legacy_surface, dict):
+        violations.append(
+            {
+                "code": "R164_DESKTOP_SURFACE_MISSING",
+                "message": "Legacy Desktop host-surface contract is missing",
+            }
+        )
+        legacy_surface = {}
+    elif legacy_surface != DEFAULT_HOST_SURFACES["desktop"]:
+        violations.append(
+            {
+                "code": "R164_DESKTOP_SURFACE_DESCRIPTOR",
+                "message": "Legacy Desktop host-surface contract is invalid",
+            }
+        )
+    comfy_desktop_surface = surface_contracts.get("comfy_desktop")
+    if not isinstance(comfy_desktop_surface, dict):
+        violations.append(
+            {
+                "code": "R164_COMFY_DESKTOP_SURFACE_MISSING",
+                "message": "Current Desktop host-surface contract is missing",
+            }
+        )
+        comfy_desktop_surface = {}
+    if comfy_desktop_surface.get("anchor_key") != "comfy_desktop":
+        violations.append(
+            {
+                "code": "R164_COMFY_DESKTOP_ANCHOR_KEY",
+                "message": "Current Desktop must reference the comfy_desktop anchor",
+            }
+        )
+    if comfy_desktop_surface.get("generation") != "managed_install":
+        violations.append(
+            {
+                "code": "R164_COMFY_DESKTOP_GENERATION",
+                "message": "Current Desktop must use the managed_install generation",
+            }
+        )
+    if (
+        comfy_desktop_surface.get("hosted_version_mode") != "installation_specific"
+        or comfy_desktop_surface.get("core_version") is not None
+        or comfy_desktop_surface.get("frontend_version") is not None
+    ):
+        violations.append(
+            {
+                "code": "R164_COMFY_DESKTOP_HOSTED_VERSION_MODE",
+                "message": (
+                    "Current Desktop hosted core/frontend versions are "
+                    "installation-specific and must not be fixed"
+                ),
+            }
+        )
+
+    comfy_desktop_match = COMFY_DESKTOP_ANCHOR_RE.match(comfy_desktop_anchor)
+    if comfy_desktop_anchor != "unknown" and comfy_desktop_match is None:
+        violations.append(
+            {
+                "code": "R164_COMFY_DESKTOP_ANCHOR_PARSE",
+                "message": "Current Desktop anchor did not match the expected format",
+            }
+        )
+    elif comfy_desktop_match is not None:
+        comfy_desktop_version = comfy_desktop_match.group("desktop")
+        comfy_desktop_revision = comfy_desktop_match.group("revision")
+        comfy_desktop_describe = comfy_desktop_match.group("describe")
 
     compare_result = _compare_semver(
         desktop_embedded_frontend_version, standalone_frontend_version
@@ -346,12 +553,25 @@ def build_host_surface_contract(
             "desktop": {
                 "anchor": desktop_anchor,
                 "desktop_version": desktop_version,
+                "generation": legacy_surface.get("generation"),
+                "hosted_version_mode": legacy_surface.get("hosted_version_mode"),
                 "core_version": desktop_core_version,
                 "embedded_frontend_version": desktop_embedded_frontend_version,
                 "frontend_parity": {
                     "status": desktop_frontend_status,
                     "reference_frontend_version": standalone_frontend_version,
                 },
+            },
+            "comfy_desktop": {
+                "anchor": comfy_desktop_anchor,
+                "application_version": comfy_desktop_version,
+                "desktop_version": comfy_desktop_version,
+                "source_revision": comfy_desktop_revision,
+                "source_describe": comfy_desktop_describe,
+                "generation": comfy_desktop_surface.get("generation"),
+                "hosted_version_mode": comfy_desktop_surface.get("hosted_version_mode"),
+                "core_version": comfy_desktop_surface.get("core_version"),
+                "frontend_version": comfy_desktop_surface.get("frontend_version"),
             },
         },
         "violations": violations,
@@ -461,9 +681,11 @@ def run_refresh_workflow(
     publish_stage: Dict[str, Any] = {"mode": "dry-run", "updated": False}
     updated_text = doc["text"]
     metadata_after = copy.deepcopy(metadata)
+    metadata_after["schema_version"] = CURRENT_SCHEMA_VERSION
     metadata_after.setdefault("policy", {})
     metadata_after.setdefault("anchors", {})
     metadata_after.setdefault("evidence", {})
+    metadata_after["host_surfaces"] = copy.deepcopy(DEFAULT_HOST_SURFACES)
     metadata_after["last_validated_date"] = today.isoformat()
     for key in ANCHOR_KEYS:
         metadata_after["anchors"][key] = observed.get(key, "unknown")
@@ -477,7 +699,8 @@ def run_refresh_workflow(
     drift_after = detect_anchor_drift(metadata_after.get("anchors"), observed)
     validate_stage["after"] = validate_after
 
-    if apply:
+    # IMPORTANT: never publish unresolved or malformed host anchors.
+    if apply and validate_after["ok"]:
         updated_text = replace_metadata_block(doc["text"], metadata_after)
         p.write_text(updated_text, encoding="utf-8")
         publish_stage = {
@@ -488,6 +711,14 @@ def run_refresh_workflow(
             "body_sha256_after": hashlib.sha256(
                 _body_without_meta(updated_text).encode("utf-8")
             ).hexdigest(),
+        }
+    elif apply:
+        publish_stage = {
+            "mode": "apply",
+            "updated": False,
+            "blocked_by": validate_after["code"],
+            "metadata_preview_hash": _json_hash(metadata_after),
+            "drift_after": drift_after,
         }
     else:
         publish_stage = {
@@ -502,8 +733,10 @@ def run_refresh_workflow(
     decision_codes.append(drift_before["code"])
     if bootstrap_mode:
         decision_codes.append("R90_BOOTSTRAP_METADATA")
-    if apply:
+    if apply and validate_after["ok"]:
         decision_codes.append("R90_PUBLISH_APPLY")
+    elif apply:
+        decision_codes.append("R90_PUBLISH_REJECTED")
     else:
         decision_codes.append("R90_PUBLISH_DRY_RUN")
 

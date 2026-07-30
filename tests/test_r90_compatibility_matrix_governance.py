@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from services.compatibility_matrix_governance import (
@@ -22,10 +23,40 @@ from services.operator_doctor import DoctorReport, check_compatibility_matrix_go
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CURRENT_ANCHORS = {
-    "comfyui": "1377a2f7 (v0.27.0-47-g1377a2f7 / pyproject 0.27.0)",
-    "comfyui_frontend": "1.48.1 (ceb5ae1eba / v1.48.1-1-gceb5ae1eba)",
+    "comfyui": "9cf91339 (v0.29.0-12-g9cf91339 / pyproject 0.29.0)",
+    "comfyui_frontend": "1.49.1 (4b3866b838 / v1.49.1-19-g4b3866b838)",
     "desktop": "0.9.4 (core 0.22.3 / frontend 1.43.18)",
+    "comfy_desktop": "1.0.32-rc.1 (85e28b7a / v1.0.32-rc.1-3-g85e28b7)",
 }
+EXPECTED_HOST_SURFACES = {
+    "desktop": {
+        "generation": "legacy_fixed_bundle",
+        "anchor_key": "desktop",
+        "hosted_version_mode": "fixed",
+        "core_version": "0.22.3",
+        "frontend_version": "1.43.18",
+    },
+    "comfy_desktop": {
+        "generation": "managed_install",
+        "anchor_key": "comfy_desktop",
+        "hosted_version_mode": "installation_specific",
+        "core_version": None,
+        "frontend_version": None,
+    },
+}
+ACTIVE_CURRENT_REFERENCE_FILES = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "release" / "compatibility_matrix.md",
+    REPO_ROOT / "docs" / "release" / "support_policy.md",
+    REPO_ROOT / "docs" / "asset_api_adoption_decision.md",
+    REPO_ROOT / "docs" / "frontend_ux_walkthrough.md",
+)
+STALE_ACTIVE_REFERENCE_TOKENS = (
+    "1377a2f7",
+    "v0.27.0-47-g1377a2f7",
+    "ceb5ae1eba",
+    "v1.48.1-1-gceb5ae1eba",
+)
 
 
 class TestR90CompatMatrixGovernance(unittest.TestCase):
@@ -42,18 +73,31 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
         doc = read_matrix_document(
             REPO_ROOT / "docs" / "release" / "compatibility_matrix.md"
         )
+        self.assertEqual(doc["metadata"]["schema_version"], 2)
         self.assertEqual(doc["metadata"]["anchors"], EXPECTED_CURRENT_ANCHORS)
+        self.assertEqual(doc["metadata"]["host_surfaces"], EXPECTED_HOST_SURFACES)
+
+    def test_active_current_reference_files_reject_stale_anchors(self):
+        stale_hits = {}
+        for path in ACTIVE_CURRENT_REFERENCE_FILES:
+            text = path.read_text(encoding="utf-8")
+            hits = [token for token in STALE_ACTIVE_REFERENCE_TOKENS if token in text]
+            if hits:
+                stale_hits[str(path.relative_to(REPO_ROOT))] = hits
+        self.assertEqual(stale_hits, {})
 
     def test_detect_anchor_drift(self):
         published = {
             "comfyui": "a",
             "comfyui_frontend": "b",
             "desktop": "c",
+            "comfy_desktop": "d",
         }
         observed = {
             "comfyui": "a",
             "comfyui_frontend": "b2",
             "desktop": "unknown",
+            "comfy_desktop": "unknown",
         }
         drift = detect_anchor_drift(published, observed)
         self.assertFalse(drift["ok"])
@@ -66,7 +110,9 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
                 "comfyui": EXPECTED_CURRENT_ANCHORS["comfyui"],
                 "comfyui_frontend": EXPECTED_CURRENT_ANCHORS["comfyui_frontend"],
                 "desktop": EXPECTED_CURRENT_ANCHORS["desktop"],
-            }
+                "comfy_desktop": EXPECTED_CURRENT_ANCHORS["comfy_desktop"],
+            },
+            published_surfaces=EXPECTED_HOST_SURFACES,
         )
         self.assertTrue(contract["ok"], msg=contract)
         self.assertEqual(contract["code"], "R164_HOST_SURFACES_READY")
@@ -76,28 +122,94 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
         self.assertEqual(
             contract["surfaces"]["desktop"]["frontend_parity"]["status"], "lagging"
         )
+        current = contract["surfaces"]["comfy_desktop"]
+        self.assertEqual(current["desktop_version"], "1.0.32-rc.1")
+        self.assertEqual(current["generation"], "managed_install")
+        self.assertEqual(current["hosted_version_mode"], "installation_specific")
+        self.assertIsNone(current["core_version"])
+        self.assertIsNone(current["frontend_version"])
 
     def test_build_host_surface_contract_marks_invalid_desktop_anchor(self):
         contract = build_host_surface_contract(
             {
                 "comfyui_frontend": "1.44.4",
                 "desktop": "desktop-head",
-            }
+            },
         )
         self.assertFalse(contract["ok"])
         self.assertEqual(contract["code"], "R164_HOST_SURFACE_CONTRACT_INVALID")
         self.assertEqual(contract["violations"][0]["code"], "R164_DESKTOP_ANCHOR_PARSE")
 
+    def test_build_host_surface_contract_rejects_cross_wired_current_desktop(self):
+        malformed_surfaces = json.loads(json.dumps(EXPECTED_HOST_SURFACES))
+        malformed_surfaces["comfy_desktop"]["anchor_key"] = "desktop"
+        malformed_surfaces["comfy_desktop"]["core_version"] = "0.29.0"
+        contract = build_host_surface_contract(
+            EXPECTED_CURRENT_ANCHORS,
+            published_surfaces=malformed_surfaces,
+        )
+        self.assertFalse(contract["ok"])
+        codes = {entry["code"] for entry in contract["violations"]}
+        self.assertIn("R164_COMFY_DESKTOP_ANCHOR_KEY", codes)
+        self.assertIn("R164_COMFY_DESKTOP_HOSTED_VERSION_MODE", codes)
+
+    def test_validate_metadata_rejects_schema_v2_without_current_desktop_surface(self):
+        validation = validate_metadata(
+            {
+                "schema_version": 2,
+                "last_validated_date": "2026-07-31",
+                "policy": {"warn_age_days": 30, "max_age_days": 45},
+                "anchors": dict(EXPECTED_CURRENT_ANCHORS),
+                "host_surfaces": {"desktop": EXPECTED_HOST_SURFACES["desktop"]},
+            },
+            today=date(2026, 7, 31),
+        )
+        self.assertFalse(validation["ok"])
+        codes = {entry["code"] for entry in validation["violations"]}
+        self.assertIn("R90_META_HOST_SURFACE_MISSING", codes)
+
+    def test_validate_metadata_rejects_malformed_or_unknown_anchor_contracts(self):
+        malformed = {
+            "schema_version": 2,
+            "last_validated_date": "2026-07-30",
+            "policy": {"warn_age_days": 30, "max_age_days": 45},
+            "anchors": {
+                **EXPECTED_CURRENT_ANCHORS,
+                "comfy_desktop": "current-desktop-head",
+                "unexpected_host": "must-not-be-accepted",
+            },
+            "host_surfaces": json.loads(json.dumps(EXPECTED_HOST_SURFACES)),
+        }
+        validation = validate_metadata(malformed, today=date(2026, 7, 30))
+        self.assertFalse(validation["ok"])
+        codes = {entry["code"] for entry in validation["violations"]}
+        self.assertIn("R90_META_ANCHOR_FORMAT", codes)
+        self.assertIn("R90_META_ANCHOR_UNKNOWN", codes)
+
+    def test_validate_metadata_requires_explicit_schema_v1_upgrade(self):
+        validation = validate_metadata(
+            {
+                "schema_version": 1,
+                "last_validated_date": "2020-01-01",
+                "policy": {"warn_age_days": 30, "max_age_days": 45},
+                "anchors": {
+                    key: value
+                    for key, value in EXPECTED_CURRENT_ANCHORS.items()
+                    if key != "comfy_desktop"
+                },
+            }
+        )
+        self.assertFalse(validation["ok"])
+        codes = {entry["code"] for entry in validation["violations"]}
+        self.assertIn("R90_META_SCHEMA_UPGRADE_REQUIRED", codes)
+
     def test_validate_stale_metadata(self):
         metadata = {
-            "schema_version": 1,
+            "schema_version": 2,
             "last_validated_date": "2020-01-01",
             "policy": {"warn_age_days": 1, "max_age_days": 2},
-            "anchors": {
-                "comfyui": "unknown",
-                "comfyui_frontend": "unknown",
-                "desktop": "unknown",
-            },
+            "anchors": dict(EXPECTED_CURRENT_ANCHORS),
+            "host_surfaces": json.loads(json.dumps(EXPECTED_HOST_SURFACES)),
         }
         validation = validate_metadata(metadata)
         self.assertTrue(validation["ok"])
@@ -116,6 +228,7 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
                     "comfyui": "core-1",
                     "comfyui_frontend": "fe-1",
                     "desktop": "desktop-1",
+                    "comfy_desktop": "current-desktop-1",
                 },
                 apply=False,
                 updated_by="test",
@@ -127,18 +240,87 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
 
             applied = run_refresh_workflow(
                 matrix_path=matrix,
-                observed_anchors={
-                    "comfyui": "core-2",
-                    "comfyui_frontend": "fe-2",
-                    "desktop": "desktop-2",
-                },
+                observed_anchors=dict(EXPECTED_CURRENT_ANCHORS),
                 apply=True,
                 updated_by="test",
             )
             self.assertTrue(applied.ok)
             doc = read_matrix_document(matrix)
-            self.assertEqual(doc["metadata"]["anchors"]["comfyui"], "core-2")
+            self.assertEqual(doc["metadata"]["schema_version"], 2)
+            self.assertEqual(
+                doc["metadata"]["anchors"]["comfyui"],
+                EXPECTED_CURRENT_ANCHORS["comfyui"],
+            )
+            self.assertEqual(
+                doc["metadata"]["anchors"]["comfy_desktop"],
+                EXPECTED_CURRENT_ANCHORS["comfy_desktop"],
+            )
+            self.assertEqual(doc["metadata"]["host_surfaces"], EXPECTED_HOST_SURFACES)
             self.assertEqual(doc["metadata"]["evidence"]["updated_by"], "test")
+
+    def test_refresh_workflow_rejects_incomplete_apply_without_mutating_matrix(self):
+        src = REPO_ROOT / "docs" / "release" / "compatibility_matrix.md"
+        with tempfile.TemporaryDirectory() as td:
+            matrix = Path(td) / "compatibility_matrix.md"
+            baseline = src.read_text(encoding="utf-8")
+            matrix.write_text(baseline, encoding="utf-8")
+
+            result = run_refresh_workflow(
+                matrix_path=matrix,
+                observed_anchors={
+                    **EXPECTED_CURRENT_ANCHORS,
+                    "comfy_desktop": "unknown",
+                },
+                apply=True,
+                updated_by="test",
+                today=date(2026, 7, 30),
+            )
+
+            self.assertFalse(result.ok)
+            payload = result.to_dict()
+            self.assertFalse(payload["stages"]["publish"]["updated"])
+            self.assertIn("R90_PUBLISH_REJECTED", payload["decision_codes"])
+            self.assertEqual(matrix.read_text(encoding="utf-8"), baseline)
+
+    def test_refresh_workflow_refuses_incomplete_schema_v2_publish(self):
+        legacy_metadata = {
+            "schema_version": 1,
+            "last_validated_date": "2026-07-01",
+            "policy": {"warn_age_days": 30, "max_age_days": 45},
+            "anchors": {
+                key: value
+                for key, value in EXPECTED_CURRENT_ANCHORS.items()
+                if key != "comfy_desktop"
+            },
+        }
+        with tempfile.TemporaryDirectory() as td:
+            matrix = Path(td) / "compatibility_matrix.md"
+            original = (
+                "# Compatibility Matrix\n\n"
+                "```openclaw-compat-matrix-meta\n"
+                + json.dumps(legacy_metadata)
+                + "\n```\n\nbody\n"
+            )
+            matrix.write_text(original, encoding="utf-8")
+            result = run_refresh_workflow(
+                matrix_path=matrix,
+                observed_anchors={
+                    **legacy_metadata["anchors"],
+                    "comfy_desktop": "unknown",
+                },
+                apply=True,
+                updated_by="test",
+                today=date(2026, 7, 30),
+            )
+
+            self.assertFalse(result.ok)
+            self.assertFalse(result.stages["publish"]["updated"])
+            codes = {
+                entry["code"]
+                for entry in result.stages["validate"]["after"]["violations"]
+            }
+            self.assertIn("R90_META_ANCHOR_UNRESOLVED", codes)
+            self.assertEqual(matrix.read_text(encoding="utf-8"), original)
 
     def test_operator_doctor_warns_when_matrix_stale(self):
         with tempfile.TemporaryDirectory() as td:
@@ -151,14 +333,11 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
                     "```openclaw-compat-matrix-meta\n"
                     + json.dumps(
                         {
-                            "schema_version": 1,
+                            "schema_version": 2,
                             "last_validated_date": "2020-01-01",
                             "policy": {"warn_age_days": 1, "max_age_days": 2},
-                            "anchors": {
-                                "comfyui": "unknown",
-                                "comfyui_frontend": "unknown",
-                                "desktop": "unknown",
-                            },
+                            "anchors": dict(EXPECTED_CURRENT_ANCHORS),
+                            "host_surfaces": EXPECTED_HOST_SURFACES,
                         }
                     )
                     + "\n```\n\nbody\n"
@@ -185,12 +364,22 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
         self.assertEqual(
             report.environment["compat_desktop_embedded_frontend_status"], "lagging"
         )
+        self.assertEqual(
+            report.environment["compat_comfy_desktop_generation"], "managed_install"
+        )
+        self.assertEqual(
+            report.environment["compat_comfy_desktop_hosted_version_mode"],
+            "installation_specific",
+        )
 
     def test_r166_desktop_runtime_lane_matches_recorded_desktop_anchor_contract(self):
         doc = read_matrix_document(
             REPO_ROOT / "docs" / "release" / "compatibility_matrix.md"
         )
-        contract = build_host_surface_contract(doc["metadata"]["anchors"])
+        contract = build_host_surface_contract(
+            doc["metadata"]["anchors"],
+            published_surfaces=doc["metadata"]["host_surfaces"],
+        )
         self.assertTrue(contract["ok"], msg=contract)
         desktop_surface = contract["surfaces"]["desktop"]
         self.assertEqual(desktop_surface["frontend_parity"]["status"], "lagging")
@@ -224,6 +413,8 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
                     "fe-x",
                     "--anchor-desktop",
                     "desk-x",
+                    "--anchor-comfy-desktop",
+                    EXPECTED_CURRENT_ANCHORS["comfy_desktop"],
                     "--output",
                     str(out),
                     "--pretty",
