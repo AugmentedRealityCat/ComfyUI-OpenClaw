@@ -386,6 +386,22 @@ class EffectiveSecurityPostureTestCase(unittest.TestCase):
             )
         self.assertNotIn("PRIVATE_PROFILE_CANARY", str(profile_error.exception))
 
+        class LateExplodingMapping(dict):
+            def get(self, key, default=None):
+                if key == "OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN":
+                    raise RuntimeError("PRIVATE_DELEGATED_MAPPING_CANARY")
+                return super().get(key, default)
+
+        with self.assertRaisesRegex(
+            ValueError, "^security posture evaluation failed$"
+        ) as delegated_error:
+            resolve_effective_security_posture(
+                LateExplodingMapping(), network_exposed=False
+            )
+        self.assertNotIn(
+            "PRIVATE_DELEGATED_MAPPING_CANARY", str(delegated_error.exception)
+        )
+
     def test_request_dynamic_security_state_is_not_in_snapshot_schema(self):
         forbidden_names = {
             "presented",

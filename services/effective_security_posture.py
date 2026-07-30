@@ -213,7 +213,12 @@ def resolve_effective_security_posture(
         else deployment_profile
     )
 
-    report = _deployment_report(deployment_profile, env)
+    try:
+        report = _deployment_report(deployment_profile, env)
+    except Exception:
+        # CRITICAL: delegated evaluators must not expose hostile mapping values or
+        # exception text across the immutable posture boundary.
+        raise ValueError("security posture evaluation failed") from None
     findings = tuple(_safe_finding(check) for check in report.checks)
     pass_codes = tuple(item.code for item in findings if item.severity == "pass")
     warn_codes = tuple(item.code for item in findings if item.severity == "warn")
@@ -245,7 +250,10 @@ def resolve_effective_security_posture(
         _normalized(env, "OPENCLAW_SPLIT_COMPAT_OVERRIDE") in _CONTROL_PLANE_TRUTHY
     )
 
-    connector = _connector_posture(env)
+    try:
+        connector = _connector_posture(env)
+    except Exception:
+        raise ValueError("security posture evaluation failed") from None
     active_platforms = tuple(
         sorted({str(item) for item in connector["active_platforms"]})
     )
