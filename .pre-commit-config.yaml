@@ -51,6 +51,12 @@ repos:
           - mypy==2.2.0
         pass_filenames: false
         always_run: true
+      - id: production-dependency-boundary
+        name: production dependency boundary contract
+        entry: python -B scripts/verify_production_dependencies.py
+        language: python
+        pass_filenames: false
+        always_run: true
 
   # Secret detection
   - repo: https://github.com/Yelp/detect-secrets
