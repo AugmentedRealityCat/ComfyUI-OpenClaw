@@ -10,7 +10,7 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +28,44 @@ else:  # pragma: no cover (test-only import mode)
         build_rate_limit_response,
         check_rate_limit,
     )
+
+if __package__ and "." in __package__:
+    from ..services import parameter_lab_policy as _parameter_lab_policy
+    from ..services.parameter_lab_policy import (
+        ParameterLabValidationError,
+        serialize_plan_payload,
+        validate_compare_input,
+        validate_sweep_dimensions,
+        validate_workflow,
+    )
+    from ..services.safe_io import safe_write_text
+else:  # pragma: no cover (test-only import mode)
+    from services import parameter_lab_policy as _parameter_lab_policy
+    from services.parameter_lab_policy import (
+        ParameterLabValidationError,
+        serialize_plan_payload,
+        validate_compare_input,
+        validate_sweep_dimensions,
+        validate_workflow,
+    )
+    from services.safe_io import safe_write_text
+
+PARAMETER_LAB_POLICY_VERSION = _parameter_lab_policy.PARAMETER_LAB_POLICY_VERSION
+PARAMETER_LAB_POLICY = _parameter_lab_policy.PARAMETER_LAB_POLICY
+MAX_PARAMETER_LAB_REQUEST_BYTES = _parameter_lab_policy.MAX_PARAMETER_LAB_REQUEST_BYTES
+MAX_PARAMETER_LAB_WORKFLOW_UTF8_BYTES = (
+    _parameter_lab_policy.MAX_PARAMETER_LAB_WORKFLOW_UTF8_BYTES
+)
+MAX_SWEEP_DIMENSIONS = _parameter_lab_policy.MAX_SWEEP_DIMENSIONS
+MAX_VALUES_PER_DIMENSION = _parameter_lab_policy.MAX_VALUES_PER_DIMENSION
+MAX_NODE_ID_UTF8_BYTES = _parameter_lab_policy.MAX_NODE_ID_UTF8_BYTES
+MAX_WIDGET_NAME_UTF8_BYTES = _parameter_lab_policy.MAX_WIDGET_NAME_UTF8_BYTES
+MAX_SCALAR_STRING_UTF8_BYTES = _parameter_lab_policy.MAX_SCALAR_STRING_UTF8_BYTES
+MAX_PARAMETER_LAB_PLAN_UTF8_BYTES = (
+    _parameter_lab_policy.MAX_PARAMETER_LAB_PLAN_UTF8_BYTES
+)
+MAX_SWEEP_COMBINATIONS = _parameter_lab_policy.MAX_SWEEP_COMBINATIONS
+MAX_COMPARE_ITEMS = _parameter_lab_policy.MAX_COMPARE_ITEMS
 
 # R98: Endpoint Metadata
 if __package__ and "." in __package__:
@@ -48,8 +86,6 @@ else:
 logger = logging.getLogger("ComfyUI-OpenClaw.services.parameter_lab")
 
 # Configuration
-MAX_SWEEP_COMBINATIONS = 50  # Hard cap to prevent queue flooding
-MAX_COMPARE_ITEMS = 8  # F50: Hard cap for side-by-side comparison
 EXPERIMENT_RETENTION_COUNT = 20
 
 
@@ -79,48 +115,27 @@ class SweepPlan:
 class SweepPlanner:
     """Generates bounded sweep plans."""
 
-    def generate(self, workflow: str, params: List[Dict[str, Any]]) -> SweepPlan:
-        if not isinstance(workflow, str) or not workflow.strip():
-            raise ValueError("workflow_json is required")
-        if not isinstance(params, list):
-            raise ValueError("params must be a list")
-
-        exp_id = f"exp_{uuid.uuid4().hex[:8]}"
-        dimensions: List[SweepDimension] = []
-
-        for p in params:
-            if not isinstance(p, dict):
-                continue
-            node_id = p.get("node_id")
-            widget_name = p.get("widget_name")
-            if node_id is None or not isinstance(widget_name, str) or not widget_name:
-                continue
-
-            dim = SweepDimension(
-                node_id=str(node_id),
-                widget_name=widget_name,
-                values=(
-                    p.get("values", []) if isinstance(p.get("values", []), list) else []
-                ),
-                strategy=str(p.get("strategy", "grid")),
-                count=int(p.get("count", 0) or 0),
+    def generate(self, workflow: Any, params: List[Dict[str, Any]]) -> SweepPlan:
+        normalized_workflow = validate_workflow(workflow)
+        normalized_params = validate_sweep_dimensions(params)
+        dimensions: List[SweepDimension] = [
+            SweepDimension(
+                node_id=dimension["node_id"],
+                widget_name=dimension["widget_name"],
+                values=dimension["values"],
+                strategy=dimension["strategy"],
+                count=dimension["count"],
             )
-            dimensions.append(dim)
-
+            for dimension in normalized_params
+        ]
         overrides_list = self._generate_combinations(dimensions)
-        # F52: Bounded Invariant Check
-        count = len(overrides_list)
-        if count > MAX_SWEEP_COMBINATIONS:
-            raise ValueError(
-                f"Sweep size {count} exceeds limit {MAX_SWEEP_COMBINATIONS}"
-            )
 
-        return SweepPlan(
-            experiment_id=exp_id,
-            workflow_json=workflow,
+        # IMPORTANT: validate a same-length placeholder before allocating any experiment ID.
+        candidate = SweepPlan(
+            experiment_id="exp_00000000",
+            workflow_json=normalized_workflow,
             dimensions=dimensions,
             runs=overrides_list,
-            # F52: Schema V1 Lock
             schema_version="1.0",
             combination_cap=MAX_SWEEP_COMBINATIONS,
             budget_cap=MAX_SWEEP_COMBINATIONS,
@@ -130,6 +145,8 @@ class SweepPlanner:
                 "lock_reason": "f52_closeout",
             },
         )
+        serialize_plan_payload(asdict(candidate))
+        return replace(candidate, experiment_id=f"exp_{uuid.uuid4().hex[:8]}")
 
     def _generate_combinations(
         self, dimensions: List[SweepDimension]
@@ -173,37 +190,18 @@ class ComparePlanner:
     """
 
     def generate(
-        self, workflow: str, items: List[Any], node_id: Any, widget_name: str
+        self, workflow: Any, items: List[Any], node_id: Any, widget_name: str
     ) -> SweepPlan:
-        if not isinstance(workflow, str) or not workflow.strip():
-            raise ValueError("workflow_json is required")
-        if not isinstance(items, list) or not items:
-            raise ValueError("items must be a non-empty list")
-        if node_id is None:
-            raise ValueError("node_id is required")
-        if not isinstance(widget_name, str) or not widget_name.strip():
-            raise ValueError("widget_name is required")
-        if len(items) > MAX_COMPARE_ITEMS:
-            raise ValueError(f"Too many items for comparison (max {MAX_COMPARE_ITEMS})")
-
-        normalized_items: List[Any] = []
-        for item in items:
-            if isinstance(item, str):
-                if not item.strip():
-                    raise ValueError("items must not contain empty strings")
-                normalized_items.append(item)
-                continue
-            if isinstance(item, (int, float, bool)):
-                normalized_items.append(item)
-                continue
-            raise ValueError("items must contain only scalar values")
-
-        exp_id = f"cmp_{uuid.uuid4().hex[:8]}"
+        normalized_workflow = validate_workflow(workflow)
+        validated_compare = validate_compare_input(items, node_id, widget_name)
+        normalized_items: List[Any] = validated_compare[0]
+        normalized_node_id = validated_compare[1]
+        normalized_widget_name = validated_compare[2]
 
         # Create a single dimension for the model/item
         dim = SweepDimension(
-            node_id=str(node_id),
-            widget_name=widget_name,
+            node_id=normalized_node_id,
+            widget_name=normalized_widget_name,
             values=normalized_items,
             strategy="compare",
         )
@@ -211,23 +209,24 @@ class ComparePlanner:
         # Generate runs (1 per item)
         runs = []
         for val in normalized_items:
-            runs.append({f"{node_id}.{widget_name}": val})
+            runs.append({f"{normalized_node_id}.{normalized_widget_name}": val})
 
-        return SweepPlan(
-            experiment_id=exp_id,
-            workflow_json=workflow,
+        candidate = SweepPlan(
+            experiment_id="cmp_00000000",
+            workflow_json=normalized_workflow,
             dimensions=[dim],
             runs=runs,
-            # F52: Schema V1 Lock
             schema_version="1.0",
             combination_cap=MAX_COMPARE_ITEMS,
-            budget_cap=MAX_COMPARE_ITEMS,  # F50: Budget aligns with compare limit
+            budget_cap=MAX_COMPARE_ITEMS,
             replay_metadata={
                 "replay_input_version": "1.0",
                 "compat_state": "supported",
                 "lock_reason": "f50_closeout",
             },
         )
+        serialize_plan_payload(asdict(candidate))
+        return replace(candidate, experiment_id=f"cmp_{uuid.uuid4().hex[:8]}")
 
 
 _compare_planner = ComparePlanner()
@@ -264,9 +263,14 @@ class ExperimentStore:
             logger.warning("Retention check failed: %s", exc)
 
     def save_plan(self, plan: SweepPlan) -> None:
-        path = self.store_dir / f"{plan.experiment_id}.json"
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(asdict(plan), handle, indent=2)
+        serialized = serialize_plan_payload(asdict(plan))
+        # IMPORTANT: keep validation before file creation and retention mutation.
+        safe_write_text(
+            str(self.store_dir),
+            f"{plan.experiment_id}.json",
+            serialized,
+            atomic=True,
+        )
         self._enforce_retention()
 
     def get_plan(self, exp_id: str) -> Optional[Dict[str, Any]]:
@@ -286,7 +290,7 @@ class ExperimentStore:
                     "note": "Legacy experiment; full replay guarantees not active",
                 }
 
-            return data
+            return data  # type: ignore[no-any-return]
         except Exception:
             return None
 
@@ -393,6 +397,36 @@ def _require_admin(request: web.Request) -> Optional[web.Response]:
     return None
 
 
+async def _read_creation_payload(request: web.Request) -> dict[str, Any]:
+    content_length = request.content_length
+    if content_length is not None and content_length > MAX_PARAMETER_LAB_REQUEST_BYTES:
+        raise ParameterLabValidationError("payload_too_large", status=413)
+
+    raw_body = bytearray()
+    while True:
+        remaining = MAX_PARAMETER_LAB_REQUEST_BYTES + 1 - len(raw_body)
+        if remaining <= 0:
+            raise ParameterLabValidationError("payload_too_large", status=413)
+        chunk = await request.content.read(min(64 * 1024, remaining))
+        if not chunk:
+            break
+        raw_body.extend(chunk)
+        if len(raw_body) > MAX_PARAMETER_LAB_REQUEST_BYTES:
+            raise ParameterLabValidationError("payload_too_large", status=413)
+
+    try:
+        data = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ParameterLabValidationError("invalid_json") from exc
+    if not isinstance(data, dict):
+        raise ParameterLabValidationError("invalid_payload")
+    return data
+
+
+def _validation_response(exc: ParameterLabValidationError) -> web.Response:
+    return web.json_response({"ok": False, "error": exc.code}, status=exc.status)
+
+
 @endpoint_metadata(
     auth=AuthTier.ADMIN,
     risk=RiskTier.MEDIUM,
@@ -410,13 +444,9 @@ async def create_compare_handler(request: web.Request) -> web.Response:
         return deny
 
     try:
-        data = await request.json()
-    except Exception:
-        return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
-
-    # Input validation.
-    if not isinstance(data, dict):
-        return web.json_response({"ok": False, "error": "invalid_payload"}, status=400)
+        data = await _read_creation_payload(request)
+    except ParameterLabValidationError as exc:
+        return _validation_response(exc)
 
     workflow = data.get("workflow_json")
     items = data.get("items", [])  # List of comparison values.
@@ -438,10 +468,10 @@ async def create_compare_handler(request: web.Request) -> web.Response:
         plan = _compare_planner.generate(workflow, items, node_id, widget_name)
         get_store().save_plan(plan)
         return web.json_response({"ok": True, "plan": asdict(plan)})
-    except ValueError as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    except ParameterLabValidationError as exc:
+        return _validation_response(exc)
     except Exception as exc:
-        logger.error("Compare creation failed: %s", exc)
+        logger.error("Compare creation failed (%s)", type(exc).__name__)
         return web.json_response({"ok": False, "error": "internal_error"}, status=500)
 
 
@@ -462,12 +492,9 @@ async def create_sweep_handler(request: web.Request) -> web.Response:
         return deny
 
     try:
-        data = await request.json()
-    except Exception:
-        return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
-
-    if not isinstance(data, dict):
-        return web.json_response({"ok": False, "error": "invalid_payload"}, status=400)
+        data = await _read_creation_payload(request)
+    except ParameterLabValidationError as exc:
+        return _validation_response(exc)
 
     workflow = data.get("workflow_json")
     params = data.get("params", [])
@@ -476,10 +503,10 @@ async def create_sweep_handler(request: web.Request) -> web.Response:
         plan = _planner.generate(workflow, params)
         get_store().save_plan(plan)
         return web.json_response({"ok": True, "plan": asdict(plan)})
-    except ValueError as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    except ParameterLabValidationError as exc:
+        return _validation_response(exc)
     except Exception as exc:
-        logger.error("Sweep creation failed: %s", exc)
+        logger.error("Sweep creation failed (%s)", type(exc).__name__)
         return web.json_response({"ok": False, "error": "internal_error"}, status=500)
 
 

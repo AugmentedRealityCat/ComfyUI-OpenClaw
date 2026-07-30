@@ -1,3 +1,5 @@
+import { filterParameterLabCandidates } from "./openclaw_parameter_lab_policy.js";
+
 const MAX_PROMOTED_WIDGET_DEPTH = 24;
 const COMPARE_WIDGET_NAMES = new Set(["ckpt_name", "lora_name", "unet_name"]);
 
@@ -289,7 +291,7 @@ export function getGraphWidgetValueCandidates(graph, nodeId, widgetName) {
     if (!opts.some((candidate) => String(candidate) === String(resolved.widget.value))) {
         opts.unshift(resolved.widget.value);
     }
-    return opts.filter((candidate) => candidate !== undefined);
+    return filterParameterLabCandidates(opts);
 }
 
 export function findComparableWidget(graph, nodeRefOrId) {

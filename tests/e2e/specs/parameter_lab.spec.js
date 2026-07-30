@@ -19,7 +19,13 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
                         widgets: [
                             { name: "seed", type: "number", value: 1234, options: {} },
                             { name: "steps", type: "number", value: 20, options: { values: [20, 30, 40] } },
-                            { name: "sampler_name", type: "combo", value: "euler", options: { values: ["euler", "ddim", "uni_pc"] } }
+                            { name: "sampler_name", type: "combo", value: "euler", options: { values: ["euler", "ddim", "uni_pc"] } },
+                            {
+                                name: "video_edit",
+                                type: "VIDEO_EDIT",
+                                value: { trim: [0, 1] },
+                                options: { values: [{ trim: [0, 1] }, ["structured"]] }
+                            }
                         ]
                     },
                     {
@@ -85,6 +91,94 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
 
         // Verify chip
         await expect(page.locator('.openclaw-chip >> text=9999')).toBeVisible();
+    });
+
+    test('rejects oversized manual scalar values before chip state mutation', async ({ page }) => {
+        await page.click('#lab-add-dim');
+        await page.selectOption('.dim-node-select', { value: '10' });
+        await page.selectOption('.dim-widget-select', { value: 'seed' });
+
+        await page.fill('.dim-manual-input', '界'.repeat(5462));
+        await page.press('.dim-manual-input', 'Enter');
+
+        await expect(page.locator('.openclaw-chip')).toHaveCount(0);
+        await expect(page.locator('.openclaw-banner')).toContainText('scalar_string_too_large');
+    });
+
+    test('does not offer structured widget values as ambiguous object candidates', async ({ page }) => {
+        await page.click('#lab-add-dim');
+        await page.selectOption('.dim-node-select', { value: '10' });
+        await page.selectOption('.dim-widget-select', { value: 'video_edit' });
+
+        const candidates = page.locator('.dim-candidate-select option');
+        await expect(candidates).toHaveCount(1);
+        await expect(candidates).not.toContainText('[object Object]');
+    });
+
+    test('caps dimensions before creating ambiguous experiment state', async ({ page }) => {
+        for (let index = 0; index < 9; index += 1) {
+            await page.click('#lab-add-dim');
+        }
+
+        await expect(page.locator('.openclaw-lab-dim-row.dynamic')).toHaveCount(8);
+        await expect(page.locator('.openclaw-banner')).toContainText('too_many_dimensions');
+    });
+
+    test('rejects an oversized serialized workflow before the API request', async ({ page }) => {
+        await page.evaluate(async () => {
+            const mod = await import('/web/openclaw_api.js');
+            window.__labRequestCount = 0;
+            const originalFetch = mod.openclawApi.fetch.bind(mod.openclawApi);
+            mod.openclawApi.fetch = async (url, options = {}) => {
+                const normalizedPath = String(url || '').replace(/^\/moltbot/, '/openclaw');
+                if (normalizedPath.endsWith('/lab/sweep')) {
+                    window.__labRequestCount += 1;
+                    return { ok: false, status: 400, error: 'unexpected_request' };
+                }
+                return originalFetch(url, options);
+            };
+            window.app.graph.serialize = () => ({ payload: 'x'.repeat(4 * 1024 * 1024 + 1) });
+        });
+
+        await page.click('#lab-add-dim');
+        await page.selectOption('.dim-node-select', { value: '10' });
+        await page.selectOption('.dim-widget-select', { value: 'seed' });
+        await page.fill('.dim-manual-input', '1');
+        await page.press('.dim-manual-input', 'Enter');
+        await page.click('#lab-generate');
+
+        await expect.poll(() => page.evaluate(() => window.__labRequestCount)).toBe(0);
+        await expect(page.locator('.openclaw-banner')).toContainText('workflow_too_large');
+    });
+
+    test('redacts workflow serialization failures before the API request', async ({ page }) => {
+        await page.evaluate(async () => {
+            const mod = await import('/web/openclaw_api.js');
+            window.__labRequestCount = 0;
+            const originalFetch = mod.openclawApi.fetch.bind(mod.openclawApi);
+            mod.openclawApi.fetch = async (url, options = {}) => {
+                const normalizedPath = String(url || '').replace(/^\/moltbot/, '/openclaw');
+                if (normalizedPath.endsWith('/lab/sweep')) {
+                    window.__labRequestCount += 1;
+                    return { ok: false, status: 400, error: 'unexpected_request' };
+                }
+                return originalFetch(url, options);
+            };
+            window.app.graph.serialize = () => {
+                throw new Error('secret=workflow-private-detail');
+            };
+        });
+
+        await page.click('#lab-add-dim');
+        await page.selectOption('.dim-node-select', { value: '10' });
+        await page.selectOption('.dim-widget-select', { value: 'seed' });
+        await page.fill('.dim-manual-input', '1');
+        await page.press('.dim-manual-input', 'Enter');
+        await page.click('#lab-generate');
+
+        await expect.poll(() => page.evaluate(() => window.__labRequestCount)).toBe(0);
+        await expect(page.locator('.openclaw-banner')).toContainText('invalid_payload');
+        await expect(page.locator('.openclaw-banner')).not.toContainText('workflow-private-detail');
     });
 
     test('generates correct plan payload', async ({ page }) => {

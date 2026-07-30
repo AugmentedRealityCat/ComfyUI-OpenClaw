@@ -232,6 +232,7 @@
       "services/packs/pack_registry.py",
       "services/packs/pack_types.py",
       "services/parameter_lab.py",
+      "services/parameter_lab_policy.py",
       "services/paths.py",
       "services/permission_posture.py",
       "services/planner.py",

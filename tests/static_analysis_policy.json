@@ -1424,27 +1424,6 @@
     {
       "tool": "mypy",
       "path": "services/parameter_lab.py",
-      "code": "arg-type",
-      "message": "Argument 1 to \"generate\" of \"ComparePlanner\" has incompatible type \"Any | None\"; expected \"str\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "services/parameter_lab.py",
-      "code": "arg-type",
-      "message": "Argument 1 to \"generate\" of \"SweepPlanner\" has incompatible type \"Any | None\"; expected \"str\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "services/parameter_lab.py",
-      "code": "no-any-return",
-      "message": "Returning Any from function declared to return \"dict[str, Any] | None\"",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
-      "path": "services/parameter_lab.py",
       "code": "unused-ignore",
       "message": "Unused \"type: ignore\" comment",
       "count": 3

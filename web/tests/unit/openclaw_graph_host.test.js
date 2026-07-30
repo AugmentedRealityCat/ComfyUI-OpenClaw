@@ -228,4 +228,33 @@ describe("openclaw_graph_host", () => {
         expect(resolveGraphWidget(graph, "loader-alpha", "palette")?.nodeEntry.id).toBe("loader-alpha");
         expect(compareTarget?.nodeId).toBe("loader-alpha");
     });
+
+    it("omits structured and presentation-ambiguous values from Parameter Lab candidates", () => {
+        const graph = createHostShapedGraphFixture();
+        const node = graph.getNodeById("loader-alpha");
+        node.widgets.push({
+            name: "video_edit",
+            type: "VIDEO_EDIT",
+            value: { trim: [0, 1] },
+            options: {
+                values: [
+                    { trim: [0, 1] },
+                    ["structured"],
+                    null,
+                    Number.NaN,
+                    1,
+                    "1",
+                    true,
+                    "true",
+                    "valid",
+                ],
+            },
+        });
+
+        expect(getGraphWidgetValueCandidates(graph, "loader-alpha", "video_edit")).toEqual([
+            1,
+            true,
+            "valid",
+        ]);
+    });
 });

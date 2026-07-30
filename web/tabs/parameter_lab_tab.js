@@ -9,6 +9,14 @@ import {
     getGraphWidgetValueCandidates,
     resolveGraphWidget,
 } from "../openclaw_graph_host.js";
+import {
+    PARAMETER_LAB_POLICY,
+    filterParameterLabCandidates,
+    validateParameterLabDimensions,
+    validateParameterLabRequestBody,
+    validateParameterLabScalar,
+    validateParameterLabWorkflow,
+} from "../openclaw_parameter_lab_policy.js";
 import { openclawUI } from "../openclaw_ui.js";
 
 /**
@@ -235,6 +243,10 @@ export const ParameterLabTab = {
     },
 
     addDimensionUI(defaults = null) {
+        if (this.dimensions.length >= PARAMETER_LAB_POLICY.maxSweepDimensions) {
+            openclawUI.showBanner("error", "Parameter Lab validation failed: too_many_dimensions");
+            return false;
+        }
         // Add a default blank dimension or use defaults
         // Allow migration from legacy values_str if needed
         const newDim = defaults || {
@@ -254,6 +266,7 @@ export const ParameterLabTab = {
 
         this.dimensions.push(newDim);
         this.renderDimensions();
+        return true;
     },
 
     removeDimension(index) {
@@ -436,6 +449,28 @@ export const ParameterLabTab = {
                         else if (!isNaN(parseFloat(val)) && isFinite(val) && !val.match(/[a-zA-Z]/)) typedVal = parseFloat(val);
 
                         if (!dim.values) dim.values = [];
+                        const scalarValidation = validateParameterLabScalar(typedVal);
+                        if (!scalarValidation.ok) {
+                            openclawUI.showBanner(
+                                "error",
+                                `Parameter Lab validation failed: ${scalarValidation.reason}`
+                            );
+                            return;
+                        }
+                        if (dim.values.length >= PARAMETER_LAB_POLICY.maxValuesPerDimension) {
+                            openclawUI.showBanner(
+                                "error",
+                                "Parameter Lab validation failed: too_many_values"
+                            );
+                            return;
+                        }
+                        if (dim.values.some((existing) => String(existing) === String(typedVal))) {
+                            openclawUI.showBanner(
+                                "error",
+                                "Parameter Lab validation failed: duplicate_ambiguous_value"
+                            );
+                            return;
+                        }
                         dim.values.push(typedVal);
                         this.renderDimensions();
                     }
@@ -515,7 +550,7 @@ export const ParameterLabTab = {
         this.dimensions = [];
 
         // Add dimension pre-filled
-        const options = target.widget.options?.values || [];
+        const options = filterParameterLabCandidates(target.widget.options?.values || []);
         let initialValues = [];
         if (options.length > 0) {
             // Pick top 2 as example
@@ -537,17 +572,7 @@ export const ParameterLabTab = {
     },
 
     async generatePlan() {
-        // Validate: logic updated to check values array
-        const validDims = this.dimensions.filter(d => d.node_id && d.widget_name && d.values && d.values.length > 0);
-
-        if (validDims.length === 0) {
-            openclawUI.showBanner("error", "Please configure at least one valid dimension with values.");
-            return;
-        }
-
-        // Prepare Payload
-        const params = validDims.map(d => {
-            // Use values directly (already typed from inputs/chips)
+        const params = this.dimensions.map(d => {
             return {
                 node_id: d.node_id,
                 widget_name: d.widget_name,
@@ -555,6 +580,14 @@ export const ParameterLabTab = {
                 strategy: d.strategy || "grid"
             };
         });
+        const dimensionValidation = validateParameterLabDimensions(params);
+        if (!dimensionValidation.ok) {
+            openclawUI.showBanner(
+                "error",
+                `Parameter Lab validation failed: ${dimensionValidation.reason}`
+            );
+            return;
+        }
 
         const hasCompare = params.some(p => p.strategy === "compare");
         if (hasCompare && params.length !== 1) {
@@ -564,35 +597,57 @@ export const ParameterLabTab = {
             );
             return;
         }
+        if (hasCompare && params[0].values.length > PARAMETER_LAB_POLICY.maxCompareItems) {
+            openclawUI.showBanner(
+                "error",
+                "Parameter Lab validation failed: too_many_values"
+            );
+            return;
+        }
 
         try {
-            // Serialize current workflow
-            // Use app.graph.serialize() to get state
             const graphJson = JSON.stringify(app.graph.serialize());
+            const workflowValidation = validateParameterLabWorkflow(graphJson);
+            if (!workflowValidation.ok) {
+                openclawUI.showBanner(
+                    "error",
+                    `Parameter Lab validation failed: ${workflowValidation.reason}`
+                );
+                return;
+            }
 
-            let res;
+            let path;
+            let payload;
             if (hasCompare) {
                 const compare = params[0];
                 openclawUI.showBanner("info", "Generating compare plan...");
-                res = await openclawApi.fetch(openclawApi._path("/lab/compare"), {
-                    method: "POST",
-                    body: JSON.stringify({
-                        workflow_json: graphJson,
-                        items: compare.values,
-                        node_id: compare.node_id,
-                        widget_name: compare.widget_name
-                    })
-                });
+                path = "/lab/compare";
+                payload = {
+                    workflow_json: graphJson,
+                    items: compare.values,
+                    node_id: compare.node_id,
+                    widget_name: compare.widget_name
+                };
             } else {
                 openclawUI.showBanner("info", "Generating sweep plan...");
-                res = await openclawApi.fetch(openclawApi._path("/lab/sweep"), {
-                    method: "POST",
-                    body: JSON.stringify({
-                        workflow_json: graphJson,
-                        params: params
-                    })
-                });
+                path = "/lab/sweep";
+                payload = {
+                    workflow_json: graphJson,
+                    params: params
+                };
             }
+            const requestValidation = validateParameterLabRequestBody(payload);
+            if (!requestValidation.ok) {
+                openclawUI.showBanner(
+                    "error",
+                    `Parameter Lab validation failed: ${requestValidation.reason}`
+                );
+                return;
+            }
+            const res = await openclawApi.fetch(openclawApi._path(path), {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
 
             if (res.ok && res.data) {
                 this.plan = res.data.plan;
@@ -602,8 +657,11 @@ export const ParameterLabTab = {
             } else {
                 openclawUI.showBanner("error", "Failed to generate plan: " + (res.error || "Unknown"));
             }
-        } catch (e) {
-            openclawUI.showBanner("error", "Plan generation error: " + e.message);
+        } catch {
+            openclawUI.showBanner(
+                "error",
+                "Parameter Lab validation failed: invalid_payload"
+            );
         }
     },
 
