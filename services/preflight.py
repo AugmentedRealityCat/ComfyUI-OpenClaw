@@ -48,7 +48,9 @@ _LEGACY_INVENTORY_CACHE_KEY = "inventory"
 _INVENTORY_LOCK = threading.RLock()
 _INVENTORY_SCAN_THREAD: threading.Thread | None = None
 _INVENTORY_ERROR_RETRY_SEC = 5
-_INVENTORY_EXCLUDED_MODEL_TYPES = {"custom_nodes"}
+# CRITICAL: datasets are user training data and executable custom_nodes are code; neither
+# may cross the model inventory filename boundary.
+_INVENTORY_EXCLUDED_MODEL_TYPES = {"custom_nodes", "datasets"}
 
 # Heuristic mapping: input_key -> folder_paths type
 _INPUT_KEY_MAP = {
@@ -147,7 +149,11 @@ def _scan_model_inventory(checkpoint: List[str] | None = None) -> Dict[str, List
 
 
 def _copy_inventory_snapshot(models: Dict[str, List[str]]) -> Dict[str, List[str]]:
-    return {key: list(value) for key, value in (models or {}).items()}
+    return {
+        key: list(value)
+        for key, value in (models or {}).items()
+        if key not in _INVENTORY_EXCLUDED_MODEL_TYPES
+    }
 
 
 def _inventory_snapshot_stale_locked(now: float | None = None) -> bool:

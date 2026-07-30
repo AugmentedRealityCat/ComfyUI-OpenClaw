@@ -129,5 +129,6 @@ describe("model_manager_tab", () => {
         expect(options).not.toContain("diffusers");
         expect(options).not.toContain("classifiers");
         expect(options).not.toContain("custom_nodes");
+        expect(options).not.toContain("datasets");
     });
 });

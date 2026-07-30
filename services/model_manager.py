@@ -114,6 +114,7 @@ MODEL_TYPE_EXCLUSION_REASONS = {
     "diffusers": "diffusers is folder-valued and needs a directory-tree install design",
     "classifiers": "classifiers are extensionless and need a dedicated content policy",
     "custom_nodes": "custom_nodes are executable plugin code, not managed model files",
+    "datasets": "datasets contain user-managed training data, not managed model weights",
 }
 MODEL_TYPE_ALIASES = {
     "config": "configs",

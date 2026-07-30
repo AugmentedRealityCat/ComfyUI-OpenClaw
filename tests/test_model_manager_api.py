@@ -1,4 +1,5 @@
 import hashlib
+import json
 import tempfile
 import time
 import unittest
@@ -145,6 +146,50 @@ class TestModelManagerAPI(AioHTTPTestCase):
     async def test_admin_gating(self, _mock_admin):
         resp = await self.client.get("/openclaw/models/search")
         self.assertEqual(resp.status, 403)
+
+    @patch("api.model_manager.require_admin_token", return_value=(True, None))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        side_effect=AssertionError(
+            "dataset exclusion must run before outbound URL validation"
+        ),
+    )
+    @unittest_run_loop
+    async def test_dataset_download_returns_stable_unsupported_contract(
+        self, mock_validate_url, _mock_admin
+    ):
+        response = await self.client.post(
+            "/openclaw/models/downloads",
+            json={
+                "model_id": "dataset-attempt",
+                "name": "Dataset Attempt",
+                "model_type": "datasets",
+                "source": "catalog",
+                "source_label": "Catalog",
+                "download_url": "https://example.invalid/private-caption.txt",
+                "expected_sha256": "a" * 64,
+                "provenance": {
+                    "publisher": "private-publisher-sentinel",
+                    "license": "private-license-sentinel",
+                    "source_url": "https://example.invalid/private-source",
+                },
+                "destination_subdir": "../private-dataset",
+                "filename": "private-caption.txt",
+            },
+        )
+        payload = await response.json()
+
+        self.assertEqual(response.status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"], "unsupported_model_type")
+        self.assertEqual(
+            payload["detail"],
+            "model_type 'datasets' is not supported for managed install/import: "
+            "datasets contain user-managed training data, not managed model weights",
+        )
+        self.assertNotIn("private-caption", json.dumps(payload))
+        self.assertFalse(mock_validate_url.called)
+        self.assertEqual(self.manager._tasks, {})
 
     @patch("api.model_manager.require_admin_token", return_value=(True, None))
     @patch(
