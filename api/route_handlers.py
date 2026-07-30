@@ -137,7 +137,23 @@ async def health_response(request: Any, deps: RouteHandlerDependencies) -> Any:
             from services.startup_lifecycle import get_startup_diagnostics
         startup_diagnostics = get_startup_diagnostics()
     except Exception:
-        startup_diagnostics = {"state": "unknown", "ready": False, "warmups": {}}
+        # SECURITY: keep the public fallback deterministic and content-free even when
+        # startup diagnostics cannot be imported.
+        startup_diagnostics = {
+            "schema_version": 1,
+            "phase": "package_import",
+            "state": "fatal",
+            "reason_code": "bootstrap_import_failed",
+            "ready": False,
+            "degraded": False,
+            "fatal": True,
+            "attempt": 0,
+            "max_attempts": 0,
+            "elapsed_ms": 0,
+            "phase_elapsed_ms": 0,
+            "ready_elapsed_ms": None,
+            "warmups": [],
+        }
 
     job_stats = {}
     try:

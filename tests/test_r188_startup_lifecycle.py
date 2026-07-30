@@ -39,28 +39,39 @@ class TestStartupLifecycleDiagnostics(unittest.TestCase):
         diagnostics = get_startup_diagnostics()
         while time.monotonic() < deadline:
             diagnostics = get_startup_diagnostics()
-            if diagnostics["warmups"]["slow_provider"]["state"] == "timed_out":
+            warmup = next(
+                (
+                    item
+                    for item in diagnostics["warmups"]
+                    if item["name"] == "slow_provider"
+                ),
+                None,
+            )
+            if warmup and warmup["state"] == "timed_out":
                 break
             time.sleep(0.01)
 
         release.set()
-        self.assertEqual(diagnostics["state"], "degraded-warmup")
+        self.assertEqual(diagnostics["state"], "degraded")
         self.assertEqual(diagnostics["ready"], True)
-        self.assertEqual(diagnostics["warmups"]["slow_provider"]["state"], "timed_out")
+        self.assertEqual(warmup["state"], "timed_out")
 
     def test_fatal_startup_state_is_distinct_from_warmup_degradation(self):
         from services.startup_lifecycle import (
             get_startup_diagnostics,
+            mark_required_initialization_started,
             mark_startup_fatal,
         )
 
-        mark_startup_fatal("security_gate", RuntimeError("blocked"))
+        mark_required_initialization_started()
+        mark_startup_fatal("required_initialization", RuntimeError("blocked"))
         diagnostics = get_startup_diagnostics()
 
-        self.assertEqual(diagnostics["state"], "fatal-startup")
+        self.assertEqual(diagnostics["state"], "fatal")
         self.assertFalse(diagnostics["ready"])
-        self.assertEqual(diagnostics["fatal"]["phase"], "security_gate")
-        self.assertIn("RuntimeError", diagnostics["fatal"]["error_type"])
+        self.assertTrue(diagnostics["fatal"])
+        self.assertEqual(diagnostics["phase"], "required_initialization")
+        self.assertEqual(diagnostics["reason_code"], "required_initialization_failed")
 
 
 class _DummyRoutes:
@@ -117,13 +128,17 @@ class _DummyBridgeHandlers:
 
 class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
     def setUp(self):
+        from services import route_bootstrap
         from services.startup_lifecycle import reset_startup_lifecycle_for_tests
 
+        route_bootstrap.reset_route_bootstrap_for_tests()
         reset_startup_lifecycle_for_tests()
 
     def tearDown(self):
+        from services import route_bootstrap
         from services.startup_lifecycle import reset_startup_lifecycle_for_tests
 
+        route_bootstrap.reset_route_bootstrap_for_tests()
         reset_startup_lifecycle_for_tests()
 
     def test_full_registration_marks_ready_before_optional_warmup_finishes(self):
@@ -169,6 +184,7 @@ class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
             get_runner.return_value = MagicMock()
             started_at = time.monotonic()
             route_bootstrap._do_full_registration(server)
+            route_bootstrap._mark_startup_ready_and_start_warmups()
             elapsed = time.monotonic() - started_at
 
         diagnostics = get_startup_diagnostics()
@@ -179,16 +195,16 @@ class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
         self.assertTrue(app.triggers)
         self.assertTrue(app.approvals)
         self.assertTrue(diagnostics["ready"])
-        self.assertIn(
-            diagnostics["warmups"]["slow_provider"]["state"], {"running", "succeeded"}
+        warmup = next(
+            item for item in diagnostics["warmups"] if item["name"] == "slow_provider"
         )
+        self.assertIn(warmup["state"], {"running", "succeeded"})
 
     def test_register_routes_once_marks_fatal_when_required_startup_fails(self):
         from services import route_bootstrap
         from services.startup_lifecycle import get_startup_diagnostics
 
         with (
-            patch.object(route_bootstrap, "_routes_registered", False),
             patch.object(route_bootstrap, "_register_plugins_and_shutdown_hooks"),
             patch.object(
                 route_bootstrap,
@@ -200,9 +216,10 @@ class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
                 route_bootstrap.register_routes_once()
 
         diagnostics = get_startup_diagnostics()
-        self.assertEqual(diagnostics["state"], "fatal-startup")
+        self.assertEqual(diagnostics["state"], "fatal")
         self.assertFalse(diagnostics["ready"])
-        self.assertEqual(diagnostics["fatal"]["phase"], "required_startup")
+        self.assertTrue(diagnostics["fatal"])
+        self.assertEqual(diagnostics["reason_code"], "required_initialization_failed")
 
 
 if __name__ == "__main__":

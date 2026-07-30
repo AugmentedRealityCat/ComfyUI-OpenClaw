@@ -53,7 +53,17 @@ def _bootstrap_openclaw_routes() -> None:
             from .services.route_bootstrap import register_routes_once
         else:
             from services.route_bootstrap import register_routes_once
-    except Exception:
+    except Exception as exc:
+        try:
+            if __package__:
+                from .services.startup_lifecycle import mark_bootstrap_import_failed
+            else:
+                from services.startup_lifecycle import mark_bootstrap_import_failed
+
+            mark_bootstrap_import_failed(exc)
+        except Exception:
+            # IMPORTANT: diagnostics must not mask the original compatibility fallback.
+            pass
         return
 
     register_routes_once()

@@ -1752,13 +1752,6 @@
     },
     {
       "tool": "mypy",
-      "path": "services/route_bootstrap.py",
-      "code": "misc",
-      "message": "Assignment to variable \"exc\" outside except: block",
-      "count": 1
-    },
-    {
-      "tool": "mypy",
       "path": "services/runtime_config.py",
       "code": "attr-defined",
       "message": "\"Callable[[str], str | None]\" has no attribute \"_warned_legacy\"",
@@ -8388,13 +8381,6 @@
     },
     {
       "tool": "ruff",
-      "path": "services/route_bootstrap.py",
-      "code": "N806",
-      "message": "Variable `PromptServer` in function should be lowercase",
-      "count": 2
-    },
-    {
-      "tool": "ruff",
       "path": "services/runtime_config.py",
       "code": "F401",
       "message": "`services.runtime_config_policy.get_apply_semantics` imported but unused",
@@ -9666,34 +9652,6 @@
       "code": "UP035",
       "message": "Import from `collections.abc` instead: `Mapping`",
       "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "services/startup_lifecycle.py",
-      "code": "UP006",
-      "message": "Use `dict` instead of `Dict` for type annotation",
-      "count": 5
-    },
-    {
-      "tool": "ruff",
-      "path": "services/startup_lifecycle.py",
-      "code": "UP035",
-      "message": "Import from `collections.abc` instead: `Callable`, `Iterable`",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "services/startup_lifecycle.py",
-      "code": "UP035",
-      "message": "`typing.Dict` is deprecated, use `dict` instead",
-      "count": 1
-    },
-    {
-      "tool": "ruff",
-      "path": "services/startup_lifecycle.py",
-      "code": "UP045",
-      "message": "Use `X | None` for type annotations",
-      "count": 5
     },
     {
       "tool": "ruff",

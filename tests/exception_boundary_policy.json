@@ -126,19 +126,19 @@
           "review_after": "2027-01-11"
         },
         {
-          "scope": "_start_registration_retry_loop._retry_worker",
-          "expected_count": 1,
+          "scope": "_run_registration_retry_loop",
+          "expected_count": 2,
           "classification": "allowed_boundary_guard",
-          "reason": "Background route warmup retries after transient registration failures.",
-          "regression_owner": "tests/test_route_registration.py",
+          "reason": "The bounded retry owner classifies PromptServer resolution and route registration failures without exposing exception content.",
+          "regression_owner": "tests/test_bootstrap_lifecycle_outcome.py",
           "review_after": "2027-01-11"
         },
         {
           "scope": "register_routes_once",
-          "expected_count": 2,
+          "expected_count": 5,
           "classification": "allowed_boundary_guard",
-          "reason": "Required startup failures are recorded and re-raised instead of hidden.",
-          "regression_owner": "tests/test_r180_exception_boundary_governance.py",
+          "reason": "Required, host-resolution, retry-owner-start, and route failures are classified and replayed fail-closed, while BaseException cleanup re-raises cancellation unchanged.",
+          "regression_owner": "tests/test_bootstrap_lifecycle_outcome.py",
           "review_after": "2027-01-11"
         }
       ]
