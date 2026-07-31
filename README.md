@@ -184,6 +184,7 @@ See full update history: [docs/release/recent_updates.md](docs/release/recent_up
   - [Basic operations](#basic-operations)
   - [Reverse proxy and exposure notes](#reverse-proxy-and-exposure-notes)
 - [Nodes](#nodes)
+  - [Native Media Inputs](#native-media-inputs)
   - [Node Portability and Workflow Fallback](#node-portability-and-workflow-fallback)
 - [Extension UI](#extension-ui)
   - [Sidebar Modules](#sidebar-modules)
@@ -397,6 +398,22 @@ Nodes are exported as `Moltbot*` class names for compatibility, but appear as `o
 The current node category is `openclaw`; serialized workflows that still reference the legacy `Moltbot*` class names continue to load through retained compatibility aliases.
 
 See `web/docs/` for node usage notes.
+
+### Native Media Inputs
+
+Current supported ComfyUI hosts already provide the media-ingestion nodes needed by
+OpenClaw image consumers:
+
+- For video frames, connect ComfyUI's `Load Video` node to `Get Video Components` and use
+  its `images` output. File selection and upload stay inside the ComfyUI input boundary.
+- For a camera snapshot, use ComfyUI's `Webcam Capture` node. Camera permission and
+  secure-context requirements are handled by the host frontend; the captured frame is
+  uploaded to ComfyUI temporary storage and returned as an `IMAGE`.
+
+OpenClaw intentionally does not register duplicate video-decoder or camera-capture nodes.
+This keeps media decoding, browser device permission, and native `VIDEO` / `IMAGE`
+compatibility owned by ComfyUI and avoids adding a second ffmpeg or backend-device access
+path.
 
 ### Node Portability and Workflow Fallback
 
