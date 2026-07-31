@@ -379,4 +379,217 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
         await page.selectOption('.dim-candidate-select', { value: 'xl.ckpt' });
         await expect(page.locator('.openclaw-chip >> text=xl.ckpt')).toBeVisible();
     });
+
+    test('uses an authoritative receipt when the host queue API returns only boolean', async ({ page }) => {
+        await page.evaluate(async () => {
+            const mod = await import('/web/openclaw_api.js');
+            const { api } = await import('/scripts/api.js');
+            const receiptMod = await import('/web/openclaw_parameter_lab_receipt.js');
+            window.__labRunUpdates = [];
+            window.__labQueueCalls = 0;
+            window.__labSubmittedPromptIds = [];
+            window.app.rootGraph = window.app.graph;
+            window.app.processingQueue = false;
+            window.app.queueItems = [];
+            window.app.nextQueueRequestId = 1;
+            window.app.graph.serialize = function () {
+                const data = { nodes: [], extra: {} };
+                this.onSerialize?.(data);
+                return data;
+            };
+            window.app.queuePrompt = async function (number, batchCount = 1) {
+                window.__labQueueCalls += 1;
+                const requestId = this.nextQueueRequestId++;
+                this.queueItems.push({ requestId, number, batchCount });
+                api.dispatchCustomEvent('promptQueueing', { requestId, batchCount });
+                if (this.processingQueue) return false;
+
+                this.processingQueue = true;
+                await Promise.resolve();
+                try {
+                    while (this.queueItems.length) {
+                        const request = this.queueItems.pop();
+                        let queuedCount = 0;
+                        for (let index = 0; index < request.batchCount; index += 1) {
+                            for (const node of this.graph._nodes) {
+                                for (const widget of node.widgets || []) {
+                                    widget.beforeQueued?.({ isPartialExecution: false });
+                                }
+                            }
+                            const workflow = this.graph.serialize();
+                            const marker =
+                                workflow.extra?.[receiptMod.PARAMETER_LAB_RECEIPT_KEY];
+                            if (!marker?.prompt_id) throw new Error('missing receipt marker');
+                            delete workflow.extra[receiptMod.PARAMETER_LAB_RECEIPT_KEY];
+                            window.__labSubmittedPromptIds.push(marker.prompt_id);
+                            for (const node of this.graph._nodes) {
+                                for (const widget of node.widgets || []) {
+                                    widget.afterQueued?.({ isPartialExecution: false });
+                                }
+                            }
+                            queuedCount += 1;
+                        }
+                        api.dispatchCustomEvent('promptQueued', {
+                            requestId: request.requestId,
+                            batchCount: queuedCount,
+                            number: request.number
+                        });
+                    }
+                } finally {
+                    this.processingQueue = false;
+                }
+                return true;
+            };
+
+            const originalFetch = mod.openclawApi.fetch.bind(mod.openclawApi);
+            mod.openclawApi.fetch = async (url, options = {}) => {
+                const normalizedPath = String(url || '').replace(/^\/moltbot/, '/openclaw');
+                if (normalizedPath.endsWith('/lab/sweep')) {
+                    return {
+                        ok: true,
+                        status: 200,
+                        data: {
+                            plan: {
+                                experiment_id: 'exp_receipt',
+                                dimensions: [
+                                    {
+                                        node_id: 10,
+                                        widget_name: 'seed',
+                                        values: [42],
+                                        strategy: 'grid'
+                                    }
+                                ],
+                                runs: [{ '10.seed': 42 }]
+                            }
+                        }
+                    };
+                }
+                if (normalizedPath.includes('/lab/experiments/exp_receipt/runs/0')) {
+                    window.__labRunUpdates.push(JSON.parse(options?.body || '{}'));
+                    return { ok: true, status: 200, data: {} };
+                }
+                return originalFetch(url, options);
+            };
+        });
+
+        await page.click('#lab-add-dim');
+        await page.selectOption('.dim-node-select', { value: '10' });
+        await page.selectOption('.dim-widget-select', { value: 'seed' });
+        await page.fill('.dim-manual-input', '42');
+        await page.press('.dim-manual-input', 'Enter');
+        await page.click('#lab-generate');
+        await expect(page.locator('#lab-run-all')).toBeVisible();
+        await page.click('#lab-run-all');
+
+        await expect.poll(() => page.evaluate(() => window.__labQueueCalls)).toBe(1);
+        await expect(page.locator('.openclaw-lab-run-item .run-status')).toContainText('Queued');
+        const updates = await page.evaluate(() => window.__labRunUpdates);
+        expect(updates).toEqual([
+            expect.objectContaining({
+                status: 'queued',
+                output: { prompt_id: expect.any(String) }
+            })
+        ]);
+        const submitted = await page.evaluate(() => window.__labSubmittedPromptIds);
+        expect(submitted).toHaveLength(1);
+        expect(updates[0].output.prompt_id).toBe(submitted[0]);
+
+        await page.evaluate(async (promptId) => {
+            const { api } = await import('/scripts/api.js');
+            api.dispatchCustomEvent('execution_start', { prompt_id: promptId });
+        }, submitted[0]);
+        await expect(page.locator('.openclaw-lab-run-item .run-status')).toHaveText('Running');
+        await expect.poll(() => page.evaluate(() => window.__labRunUpdates)).toEqual([
+            expect.objectContaining({ status: 'queued' }),
+            { status: 'running' }
+        ]);
+
+        await page.evaluate(async (promptId) => {
+            const { api } = await import('/scripts/api.js');
+            api.dispatchCustomEvent('execution_success', {
+                prompt_id: '00000000-0000-4000-8000-000000000000'
+            });
+            api.dispatchCustomEvent('execution_success', { prompt_id: promptId });
+            api.dispatchCustomEvent('execution_error', { prompt_id: promptId });
+        }, submitted[0]);
+        await expect(page.locator('.openclaw-lab-run-item .run-status')).toHaveText('Completed');
+        await expect.poll(() => page.evaluate(() => window.__labRunUpdates)).toEqual([
+            expect.objectContaining({ status: 'queued' }),
+            { status: 'running' },
+            { status: 'completed' }
+        ]);
+
+        await expect(page.locator('.openclaw-banner')).toContainText(
+            'All experiment runs finished.'
+        );
+
+        await page.evaluate(async () => {
+            const { api } = await import('/scripts/api.js');
+            const watchedEvents = new Set([
+                'promptQueueing',
+                'promptQueued',
+                'execution_start',
+                'execution_success',
+                'execution_error',
+                'execution_interrupted'
+            ]);
+            const widget = window.app.graph.getNodeById(10).widgets[0];
+            const originalAddEventListener = api.addEventListener.bind(api);
+            const originalRemoveEventListener = api.removeEventListener.bind(api);
+            window.__labDisposeProbe = {
+                listenerBalance: 0,
+                originalBeforeQueued: widget.beforeQueued,
+                originalAfterQueued: widget.afterQueued
+            };
+            api.addEventListener = (type, callback, options) => {
+                if (watchedEvents.has(type)) {
+                    window.__labDisposeProbe.listenerBalance += 1;
+                }
+                return originalAddEventListener(type, callback, options);
+            };
+            api.removeEventListener = (type, callback, options) => {
+                if (watchedEvents.has(type)) {
+                    window.__labDisposeProbe.listenerBalance -= 1;
+                }
+                return originalRemoveEventListener(type, callback, options);
+            };
+            window.app.processingQueue = false;
+            window.app.queuePrompt = function (_number, batchCount = 1) {
+                const requestId = this.nextQueueRequestId++;
+                api.dispatchCustomEvent('promptQueueing', { requestId, batchCount });
+                this.processingQueue = true;
+                return new Promise(() => {});
+            };
+        });
+
+        await page.click('#lab-run-all');
+        await expect.poll(() => page.evaluate(() => {
+            const widget = window.app.graph.getNodeById(10).widgets[0];
+            const probe = window.__labDisposeProbe;
+            return {
+                callbacksWrapped:
+                    widget.beforeQueued !== probe.originalBeforeQueued &&
+                    widget.afterQueued !== probe.originalAfterQueued,
+                listenerBalance: probe.listenerBalance
+            };
+        })).toEqual({ callbacksWrapped: true, listenerBalance: 6 });
+
+        await clickTab(page, 'Settings');
+        await expect.poll(() => page.evaluate(() => {
+            const widget = window.app.graph.getNodeById(10).widgets[0];
+            const probe = window.__labDisposeProbe;
+            return {
+                callbacksRestored:
+                    widget.beforeQueued === probe.originalBeforeQueued &&
+                    widget.afterQueued === probe.originalAfterQueued,
+                listenerBalance: probe.listenerBalance,
+                parameterPaneChildren:
+                    document.querySelector('#openclaw-tab-parameter-lab')?.childElementCount
+            };
+        })).toEqual({
+            callbacksRestored: true,
+            listenerBalance: 0,
+            parameterPaneChildren: 0
+        });
+    });
 });

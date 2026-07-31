@@ -208,6 +208,9 @@ def _initialize_registries_and_security_gate() -> None:
 def _do_full_registration(server) -> None:
     """Register all OpenClaw routes including bridge/scheduler bindings."""
     from .access_control import require_admin_token
+    from .parameter_lab_queue_receipt import (
+        register_parameter_lab_queue_receipt_handler,
+    )
     from .plugins.async_bridge import run_async_in_sync_context
     from .queue_submit import submit_prompt
     from .route_bootstrap_contract import load_route_bootstrap_contract
@@ -223,6 +226,8 @@ def _do_full_registration(server) -> None:
     register_trigger_routes = contract["register_trigger_routes"]
 
     register_routes(server)
+    # CRITICAL: receipt promotion is required for exact Parameter Lab run ownership.
+    register_parameter_lab_queue_receipt_handler(server)
     register_preset_routes(server.app)
     register_schedule_routes(server.app, require_admin_token_fn=require_admin_token)
 
@@ -449,7 +454,7 @@ def _run_registration_retry_loop(
                     _mark_startup_fatal("route_registration", exc)
                     _store_registration_failure(exc, generation=owner_generation)
                     logger.error(
-                        "Route registration failed " "(attempt=%s, error_type=%s)",
+                        "Route registration failed (attempt=%s, error_type=%s)",
                         attempt,
                         type(exc).__name__,
                     )
@@ -574,7 +579,7 @@ def register_routes_once() -> None:
                 )
                 _store_registration_failure(exc, generation=generation)
                 logger.error(
-                    "Route registration retry owner failed to start " "(error_type=%s)",
+                    "Route registration retry owner failed to start (error_type=%s)",
                     type(exc).__name__,
                 )
                 raise

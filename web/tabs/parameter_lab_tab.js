@@ -1,6 +1,7 @@
 // CRITICAL: this tab module is loaded under /extensions/<pack>/web/tabs/*.js.
 // Must resolve ComfyUI core app from /scripts/app.js via ../../../ prefix.
 import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import { openclawApi } from "../openclaw_api.js";
 import {
     findComparableWidget,
@@ -17,6 +18,7 @@ import {
     validateParameterLabScalar,
     validateParameterLabWorkflow,
 } from "../openclaw_parameter_lab_policy.js";
+import { createParameterLabReceiptCoordinator } from "../openclaw_parameter_lab_receipt.js";
 import { openclawUI } from "../openclaw_ui.js";
 
 /**
@@ -37,8 +39,14 @@ export const ParameterLabTab = {
     experimentId: null,
     isRunning: false,
     results: [],
+    _receiptCoordinator: null,
+    _runController: null,
+    _activePromptIds: null,
+    _queuedRunCount: 0,
+    _queueingComplete: false,
 
     render(container) {
+        this._disposeRunRuntime();
         container.innerHTML = "";
         container.className = "openclaw-tab-content openclaw-tab-content moltbot-tab-content openclaw-lab-container openclaw-lab-container moltbot-lab-container";
 
@@ -144,6 +152,27 @@ export const ParameterLabTab = {
             window.addEventListener("moltbot:lab:compare", onCompare);
             this._listeningForCompare = true;
         }
+    },
+
+    dispose() {
+        const hadRuntime = Boolean(
+            this._receiptCoordinator || this._runController || this.es
+        );
+        this._disposeRunRuntime();
+        return hadRuntime;
+    },
+
+    _disposeRunRuntime() {
+        this._runController?.abort();
+        this._runController = null;
+        this._receiptCoordinator?.dispose();
+        this._receiptCoordinator = null;
+        this._activePromptIds = null;
+        this._queuedRunCount = 0;
+        this._queueingComplete = false;
+        this.es?.close?.();
+        this.es = null;
+        this.isRunning = false;
     },
 
     async showHistory() {
@@ -712,48 +741,33 @@ export const ParameterLabTab = {
 
     async runExperiment() {
         if (this.isRunning) return;
+        this._disposeRunRuntime();
         this.isRunning = true;
         openclawUI.showBanner("info", "Starting experiment...");
 
         const items = this.resultsContainer.querySelectorAll(".openclaw-lab-run-item");
-
-        // Subscribe to events for status updates
-        const es = openclawApi.subscribeEvents((data) => {
-            if (!this.isRunning) return; // Note: we might want to keep listening even after queuing finishes
-            const pid = data.prompt_id;
-            if (!pid) return;
-
-            // Find run with this prompt_id
-            const runIdx = this.plan.runs.findIndex(r => r.prompt_id === pid);
-            if (runIdx !== -1) {
-                const item = items[runIdx];
-                const statusSpan = item.querySelector(".run-status");
-
-                if (data.event_type === "execution_success" || data.event_type === "completed") {
-                    statusSpan.className = "run-status success";
-                    statusSpan.textContent = "Completed";
-                    // Update backend
-                    openclawApi.fetch(openclawApi._path(`/lab/experiments/${this.experimentId}/runs/${runIdx}`), {
-                        method: "POST", body: JSON.stringify({ status: "completed" })
-                    });
-                } else if (data.event_type === "execution_error" || data.event_type === "failed") {
-                    statusSpan.className = "run-status error";
-                    statusSpan.textContent = "Failed";
-                    openclawApi.fetch(openclawApi._path(`/lab/experiments/${this.experimentId}/runs/${runIdx}`), {
-                        method: "POST", body: JSON.stringify({ status: "failed" })
-                    });
-                } else if (data.event_type === "executing") {
-                    statusSpan.className = "run-status running";
-                    statusSpan.textContent = "Executing Node " + data.node;
-                }
-            }
-        });
-
-        this.es = es;
+        this._runController = new AbortController();
+        this._activePromptIds = new Set();
+        this._queuedRunCount = 0;
+        this._queueingComplete = false;
+        try {
+            this._receiptCoordinator = createParameterLabReceiptCoordinator({
+                app,
+                api,
+            });
+        } catch (_error) {
+            this.isRunning = false;
+            openclawUI.showBanner(
+                "error",
+                "Parameter Lab queue receipt is unavailable."
+            );
+            return;
+        }
+        const signal = this._runController.signal;
 
         try {
             for (let i = 0; i < this.plan.runs.length; i++) {
-                // If user stops? (TODO: Add stop button)
+                if (signal.aborted) break;
 
                 const run = this.plan.runs[i];
                 const item = items[i];
@@ -764,35 +778,116 @@ export const ParameterLabTab = {
 
                 try {
                     // 1. Apply overrides
-                    this.applyOverrides(run);
-
-                    // 2. Queue Prompt & Capture ID
-                    const res = await app.queuePrompt(0, 1);
-
-                    if (res && res.prompt_id) {
-                        run.prompt_id = res.prompt_id;
-                        statusSpan.textContent = "Queued (" + res.prompt_id.slice(0, 4) + ")";
-
-                        // Register with backend
-                        openclawApi.fetch(openclawApi._path(`/lab/experiments/${this.experimentId}/runs/${i}`), {
-                            method: "POST",
-                            body: JSON.stringify({ status: "queued", output: { prompt_id: res.prompt_id } })
-                        });
-                    } else {
-                        throw new Error("No prompt_id returned");
+                    const receiptWidget = this.applyOverrides(run);
+                    if (!receiptWidget) {
+                        throw new Error("receipt_widget_required");
                     }
 
-                } catch (e) {
+                    // 2. Queue through the host-owned path and bind its exact receipt.
+                    const receipt = await this._receiptCoordinator.queue({
+                        experimentId: this.experimentId,
+                        runId: String(i),
+                        widget: receiptWidget,
+                        signal,
+                    });
+                    if (signal.aborted) {
+                        receipt.release();
+                        break;
+                    }
+
+                    run.prompt_id = receipt.promptId;
+                    this._activePromptIds.add(receipt.promptId);
+                    this._queuedRunCount += 1;
+                    statusSpan.textContent =
+                        "Queued (" + receipt.promptId.slice(0, 4) + ")";
+                    await this._updateRun(i, {
+                        status: "queued",
+                        output: { prompt_id: receipt.promptId },
+                    });
+
+                    receipt.subscribeLifecycle((event) => {
+                        if (signal.aborted) return;
+                        this._handleRunLifecycle({
+                            event,
+                            runIndex: i,
+                            statusSpan,
+                        });
+                    });
+                } catch (error) {
+                    if (signal.aborted) break;
                     statusSpan.className = "run-status error";
                     statusSpan.textContent = "Queue Failed";
-                    console.error(e);
+                    await this._updateRun(i, { status: "failed" });
+                    console.error("[OpenClaw] Parameter Lab queue failed", {
+                        code: error?.code || "queue_failed",
+                    });
                 }
 
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         } finally {
-            // Keep monitoring
-            openclawUI.showBanner("success", "All runs queued. Monitoring progress...");
+            this._queueingComplete = true;
+            if (!signal.aborted) {
+                if (this._queuedRunCount > 0 && this._activePromptIds.size > 0) {
+                    openclawUI.showBanner(
+                        "success",
+                        "All runs queued. Monitoring progress..."
+                    );
+                } else if (this._queuedRunCount > 0) {
+                    this.isRunning = false;
+                    openclawUI.showBanner(
+                        "success",
+                        "All experiment runs finished."
+                    );
+                } else {
+                    this.isRunning = false;
+                    openclawUI.showBanner(
+                        "error",
+                        "No experiment runs were queued."
+                    );
+                }
+            }
+        }
+    },
+
+    async _updateRun(runIndex, payload) {
+        try {
+            await openclawApi.fetch(
+                openclawApi._path(
+                    `/lab/experiments/${this.experimentId}/runs/${runIndex}`
+                ),
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                }
+            );
+        } catch (_error) {
+            console.warn("[OpenClaw] Parameter Lab run update failed");
+        }
+    },
+
+    _handleRunLifecycle({ event, runIndex, statusSpan }) {
+        if (!this._activePromptIds?.has(event.promptId)) return;
+        if (event.type === "execution_start") {
+            statusSpan.className = "run-status running";
+            statusSpan.textContent = "Running";
+            void this._updateRun(runIndex, { status: "running" });
+            return;
+        }
+
+        const succeeded = event.type === "execution_success";
+        statusSpan.className = succeeded ? "run-status success" : "run-status error";
+        statusSpan.textContent = succeeded ? "Completed" : "Failed";
+        void this._updateRun(runIndex, {
+            status: succeeded ? "completed" : "failed",
+        });
+        this._activePromptIds.delete(event.promptId);
+        if (this._queueingComplete && this._activePromptIds.size === 0) {
+            this.isRunning = false;
+            openclawUI.showBanner(
+                "success",
+                "All experiment runs finished."
+            );
         }
     },
 
@@ -804,6 +899,7 @@ export const ParameterLabTab = {
     },
 
     applyOverrides(run) {
+        let receiptWidget = null;
         Object.entries(run).forEach(([key, value]) => {
             if (key === "prompt_id" || key === "status") return;
             const separatorIndex = key.indexOf(".");
@@ -823,7 +919,9 @@ export const ParameterLabTab = {
                     : null);
             if (widget) {
                 widget.value = value;
+                receiptWidget ||= widget;
             }
         });
+        return receiptWidget;
     }
 };

@@ -289,7 +289,7 @@ class RepositoryArchitecturePolicyTests(unittest.TestCase):
         analysis = dependency_policy.analyze_repository(self.repo_root, policy)
 
         self.assertEqual(analysis.findings, ())
-        self.assertEqual(len(analysis.owned_paths), 299)
+        self.assertEqual(len(analysis.owned_paths), 300)
         self.assertEqual(len(policy["accepted_cycles"]), 2)
         self.assertEqual(len(policy["dynamic_imports"]), 8)
         self.assertEqual(len(policy["compatibility_exceptions"]), 9)

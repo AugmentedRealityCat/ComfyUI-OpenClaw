@@ -213,15 +213,20 @@ export async function mockComfyUiCore(page, options = {}) {
       status: 200,
       contentType: 'application/javascript',
       body: `
-        export const api = {
-          fetchApi: async (route, options) => {
-             // Prefix with /api if not already present (shim logic simulation)
-             const url = "/api" + route;
-             return fetch(url, options);
-          },
-          apiURL: (route) => "/api" + route,
-          fileURL: (route) => route // Simplified for test
-        };
+        class OpenClawMockComfyApi extends EventTarget {
+          async fetchApi(route, options) {
+            // Prefix with /api if not already present (shim logic simulation)
+            const url = "/api" + route;
+            return fetch(url, options);
+          }
+          apiURL(route) { return "/api" + route; }
+          fileURL(route) { return route; }
+          dispatchCustomEvent(type, detail) {
+            this.dispatchEvent(new CustomEvent(type, { detail }));
+          }
+        }
+        window.__openclawMockComfyApi ||= new OpenClawMockComfyApi();
+        export const api = window.__openclawMockComfyApi;
       `,
     });
   });

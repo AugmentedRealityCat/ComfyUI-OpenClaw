@@ -151,13 +151,19 @@ class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
             release.wait(timeout=1.0)
 
         app = SimpleNamespace(router=_DummyRouter())
-        server = SimpleNamespace(routes=_DummyRoutes(), app=app)
+        prompt_handlers = []
+        server = SimpleNamespace(
+            routes=_DummyRoutes(),
+            app=app,
+            on_prompt_handlers=prompt_handlers,
+            add_on_prompt_handler=prompt_handlers.append,
+        )
 
         contract = {
             "register_routes": lambda server: setattr(server, "core_routes", True),
             "register_preset_routes": lambda app: setattr(app, "presets", True),
-            "register_schedule_routes": lambda app, require_admin_token_fn=None: setattr(
-                app, "schedules", True
+            "register_schedule_routes": lambda app, require_admin_token_fn=None: (
+                setattr(app, "schedules", True)
             ),
             "BridgeHandlers": _DummyBridgeHandlers,
             "register_trigger_routes": lambda app, **kwargs: setattr(
@@ -194,6 +200,7 @@ class TestRouteBootstrapWarmupBoundary(unittest.TestCase):
         self.assertTrue(server.core_routes)
         self.assertTrue(app.triggers)
         self.assertTrue(app.approvals)
+        self.assertEqual(len(prompt_handlers), 1)
         self.assertTrue(diagnostics["ready"])
         warmup = next(
             item for item in diagnostics["warmups"] if item["name"] == "slow_provider"
