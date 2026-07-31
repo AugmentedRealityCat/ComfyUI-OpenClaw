@@ -185,6 +185,7 @@ See full update history: [docs/release/recent_updates.md](docs/release/recent_up
   - [Reverse proxy and exposure notes](#reverse-proxy-and-exposure-notes)
 - [Nodes](#nodes)
   - [Native Media Inputs](#native-media-inputs)
+  - [Native Audio and Text-to-Speech](#native-audio-and-text-to-speech)
   - [Workflow Workspace Ownership](#workflow-workspace-ownership)
   - [Node Portability and Workflow Fallback](#node-portability-and-workflow-fallback)
 - [Extension UI](#extension-ui)
@@ -415,6 +416,20 @@ OpenClaw intentionally does not register duplicate video-decoder or camera-captu
 This keeps media decoding, browser device permission, and native `VIDEO` / `IMAGE`
 compatibility owned by ComfyUI and avoids adding a second ffmpeg or backend-device access
 path.
+
+### Native Audio and Text-to-Speech
+
+Use native ComfyUI audio workflows for text-to-speech generation. Connect a host-provided
+voice selector and TTS node to the standard `AUDIO` flow, then use ComfyUI's native audio
+preview or save nodes. Provider availability, authentication, voice/model choice, credits,
+and output format remain owned by the host workflow and its installed nodes.
+
+OpenClaw Jobs can observe audio results exposed by ComfyUI history, but the remote chat
+connector remains a text command-and-control surface. It does not capture microphone
+input, synthesize speech independently, persist connector audio or transcripts, or return
+workflow audio as chat voice attachments. Start an approved audio workflow through the
+existing remote controls when needed, then inspect or play its result in ComfyUI or
+OpenClaw Jobs.
 
 ### Workflow Workspace Ownership
 
