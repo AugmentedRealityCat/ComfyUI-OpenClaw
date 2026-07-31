@@ -29,6 +29,7 @@ _TOP_LEVEL_KEYS = {
     "domains",
     "allowed_dependencies",
     "compatibility_exceptions",
+    "facade_contracts",
     "accepted_cycles",
     "dynamic_imports",
 }
@@ -41,6 +42,13 @@ _REVIEW_KEYS = {
 _EXCEPTION_KEYS = {
     "importer",
     "imported",
+    "owner",
+    "rationale",
+    "review_condition",
+}
+_FACADE_KEYS = {
+    "facade",
+    "implementation",
     "owner",
     "rationale",
     "review_condition",
@@ -123,6 +131,7 @@ class _PolicyContext:
     module_paths: dict[str, str]
     allowed_dependencies: dict[str, set[str]]
     compatibility_exceptions: set[tuple[str, str]]
+    facade_contracts: set[tuple[str, str]]
     accepted_cycles: set[frozenset[str]]
     dynamic_imports: dict[tuple[str, str, str, str, str], Mapping[str, Any]]
 
@@ -379,6 +388,32 @@ def _validate_policy(
         if edge[0] not in module_paths or edge[1] not in module_paths:
             findings.append(_finding("DEP_EXCEPTION_MODULE_UNKNOWN", subject=subject))
 
+    facade_contracts: set[tuple[str, str]] = set()
+    facade_entries = policy.get("facade_contracts", [])
+    if not isinstance(facade_entries, list):
+        findings.append(_finding("FACADES_INVALID"))
+        facade_entries = []
+    for index, entry in enumerate(facade_entries):
+        subject = f"facade_contracts[{index}]"
+        if not isinstance(entry, Mapping):
+            findings.append(_finding("FACADES_INVALID", subject=subject))
+            continue
+        for key in sorted(set(entry) - _FACADE_KEYS):
+            findings.append(_finding("POLICY_UNKNOWN_KEY", subject=f"{subject}.{key}"))
+        _validate_review_metadata(entry, path=subject, findings=findings)
+        edge = (
+            str(entry.get("facade", "")),
+            str(entry.get("implementation", "")),
+        )
+        if not edge[0] or not edge[1] or edge[0] == edge[1]:
+            findings.append(_finding("FACADES_INVALID", subject=subject))
+            continue
+        if edge in facade_contracts:
+            findings.append(_finding("FACADE_DUPLICATE", subject=subject))
+        facade_contracts.add(edge)
+        if edge[0] not in module_paths or edge[1] not in module_paths:
+            findings.append(_finding("FACADE_MODULE_UNKNOWN", subject=subject))
+
     accepted_cycles: set[frozenset[str]] = set()
     cycle_entries = policy.get("accepted_cycles")
     if not isinstance(cycle_entries, list):
@@ -457,6 +492,7 @@ def _validate_policy(
         module_paths=module_paths,
         allowed_dependencies=allowed_dependencies,
         compatibility_exceptions=compatibility_exceptions,
+        facade_contracts=facade_contracts,
         accepted_cycles=accepted_cycles,
         dynamic_imports=dynamic_imports,
     )
@@ -721,6 +757,26 @@ def analyze_repository(
                     "DEP_STALE_EXCEPTION",
                     path=path,
                     subject=f"{importer}->{imported}",
+                )
+            )
+
+    for facade, implementation in sorted(context.facade_contracts):
+        if (facade, implementation) not in edges:
+            path = context.module_paths.get(facade, ".")
+            findings.append(
+                _finding(
+                    "FACADE_STALE",
+                    path=path,
+                    subject=f"{facade}->{implementation}",
+                )
+            )
+        if (implementation, facade) in edges:
+            path = context.module_paths.get(implementation, ".")
+            findings.append(
+                _finding(
+                    "FACADE_REVERSE_DEPENDENCY",
+                    path=path,
+                    subject=f"{implementation}->{facade}",
                 )
             )
 

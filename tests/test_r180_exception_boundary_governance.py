@@ -8,6 +8,13 @@ from services import route_bootstrap
 
 
 class TestExceptionBoundaryGovernance(unittest.TestCase):
+    def setUp(self):
+        route_bootstrap.reset_route_bootstrap_for_tests()
+
+    def tearDown(self):
+        # IMPORTANT: registration installs process-static posture; keep test order inert.
+        route_bootstrap.reset_route_bootstrap_for_tests()
+
     def test_register_routes_once_reraises_initial_registration_failure(self):
         route_bootstrap._routes_registered = False
         server = SimpleNamespace(app=object())

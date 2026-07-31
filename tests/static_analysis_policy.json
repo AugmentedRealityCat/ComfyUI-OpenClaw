@@ -4839,6 +4839,13 @@
     },
     {
       "tool": "ruff",
+      "path": "services/bootstrap/registration.py",
+      "code": "N806",
+      "message": "Variable `BridgeHandlers` in function should be lowercase",
+      "count": 1
+    },
+    {
+      "tool": "ruff",
       "path": "services/bridge_handshake.py",
       "code": "UP006",
       "message": "Use `dict` instead of `Dict` for type annotation",
@@ -8350,13 +8357,6 @@
       "code": "UP045",
       "message": "Use `X | None` for type annotations",
       "count": 15
-    },
-    {
-      "tool": "ruff",
-      "path": "services/route_bootstrap.py",
-      "code": "N806",
-      "message": "Variable `BridgeHandlers` in function should be lowercase",
-      "count": 1
     },
     {
       "tool": "ruff",

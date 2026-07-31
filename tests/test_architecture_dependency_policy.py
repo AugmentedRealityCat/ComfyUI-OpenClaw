@@ -60,6 +60,7 @@ class ArchitecturePolicyFixture(unittest.TestCase):
                 "core": ["core"],
             },
             "compatibility_exceptions": [],
+            "facade_contracts": [],
             "accepted_cycles": [],
             "dynamic_imports": [],
         }
@@ -97,6 +98,91 @@ class ArchitecturePolicyFixture(unittest.TestCase):
 
         self._write("core/util.py", "VALUE = 1\n")
         self.assertIn("DEP_STALE_EXCEPTION", self._codes(policy))
+
+    def test_same_domain_facade_reverse_dependency_fails(self):
+        self._write("app/facade.py", "from . import implementation\n")
+        self._write("app/implementation.py", "VALUE = 1\n")
+        policy = self._policy()
+        policy["domains"]["app"].extend(
+            [
+                "app/facade.py",
+                "app/implementation.py",
+            ]
+        )
+        policy["facade_contracts"] = [
+            {
+                "facade": "app.facade",
+                "implementation": "app.implementation",
+                **self._review_metadata(),
+            }
+        ]
+        self.assertEqual(self._verify(policy), ())
+
+        self._write("app/implementation.py", "from . import facade\n")
+        self.assertIn("FACADE_REVERSE_DEPENDENCY", self._codes(policy))
+
+    def test_facade_contract_rejects_unknown_stale_and_duplicate_entries(self):
+        self._write("app/facade.py", "from . import implementation\n")
+        self._write("app/implementation.py", "VALUE = 1\n")
+        policy = self._policy()
+        policy["domains"]["app"].extend(
+            [
+                "app/facade.py",
+                "app/implementation.py",
+            ]
+        )
+        entry = {
+            "facade": "app.facade",
+            "implementation": "app.implementation",
+            **self._review_metadata(),
+        }
+        policy["facade_contracts"] = [entry, copy.deepcopy(entry)]
+        self.assertIn("FACADE_DUPLICATE", self._codes(policy))
+
+        policy["facade_contracts"] = [
+            {
+                **entry,
+                "implementation": "app.missing",
+            }
+        ]
+        self.assertIn("FACADE_MODULE_UNKNOWN", self._codes(policy))
+
+        policy["facade_contracts"] = [entry]
+        self._write("app/facade.py", "VALUE = 1\n")
+        self.assertIn("FACADE_STALE", self._codes(policy))
+
+        policy["facade_contracts"] = "invalid"
+        self.assertIn("FACADES_INVALID", self._codes(policy))
+
+        policy["facade_contracts"] = [
+            {
+                "facade": "app.facade",
+                "implementation": "app.implementation",
+                "owner": "",
+                "rationale": "",
+                "review_condition": "",
+                "unexpected": True,
+            }
+        ]
+        codes = self._codes(policy)
+        self.assertIn("POLICY_REVIEW_METADATA", codes)
+        self.assertIn("POLICY_UNKNOWN_KEY", codes)
+
+        policy["facade_contracts"] = "invalid"
+        self.assertIn("FACADES_INVALID", self._codes(policy))
+
+        policy["facade_contracts"] = [
+            {
+                "facade": "app.facade",
+                "implementation": "app.facade",
+                "owner": "",
+                "rationale": "",
+                "review_condition": "",
+            }
+        ]
+        codes = self._codes(policy)
+        self.assertIn("FACADES_INVALID", codes)
+        self.assertIn("POLICY_REVIEW_METADATA", codes)
 
     def test_new_cycle_and_stale_accepted_cycle_fail(self):
         self._write("core/util.py", "from app.main import VALUE\n")
@@ -289,10 +375,11 @@ class RepositoryArchitecturePolicyTests(unittest.TestCase):
         analysis = dependency_policy.analyze_repository(self.repo_root, policy)
 
         self.assertEqual(analysis.findings, ())
-        self.assertEqual(len(analysis.owned_paths), 300)
+        self.assertEqual(len(analysis.owned_paths), 305)
         self.assertEqual(len(policy["accepted_cycles"]), 2)
         self.assertEqual(len(policy["dynamic_imports"]), 8)
         self.assertEqual(len(policy["compatibility_exceptions"]), 9)
+        self.assertEqual(len(policy["facade_contracts"]), 3)
 
     def test_policy_change_does_not_weaken_static_analysis_governance(self):
         static_policy_path = self.repo_root / "tests" / "static_analysis_policy.json"

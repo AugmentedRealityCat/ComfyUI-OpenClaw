@@ -39,7 +39,7 @@ class TestPolicyV2(unittest.TestCase):
                 "connector/router_admin_handlers.py",
                 "connector/router_dispatch.py",
                 "connector/router_execution_handlers.py",
-                "services/route_bootstrap.py",
+                "services/bootstrap/registration.py",
                 "api/config_projection_handlers.py",
                 "api/config_llm_handlers.py",
                 "connector/platforms/slack_installation_handlers.py",
@@ -155,6 +155,20 @@ class TestPolicyV2(unittest.TestCase):
 
 
 class TestMaeProfileBoundary(unittest.TestCase):
+    def setUp(self):
+        from services.effective_security_posture import (
+            reset_effective_security_posture_for_tests,
+        )
+
+        reset_effective_security_posture_for_tests()
+
+    def tearDown(self):
+        from services.effective_security_posture import (
+            reset_effective_security_posture_for_tests,
+        )
+
+        reset_effective_security_posture_for_tests()
+
     def test_explicit_deployment_profile_precedes_runtime_probe(self):
         with (
             patch.dict(

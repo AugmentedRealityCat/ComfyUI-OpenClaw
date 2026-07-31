@@ -90,7 +90,7 @@
         }
       ]
     },
-    "services/route_bootstrap.py": {
+    "services/bootstrap/registration.py": {
       "coverage": "all_broad_catches",
       "broad_catches": [
         {

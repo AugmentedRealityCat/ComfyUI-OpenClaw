@@ -167,6 +167,9 @@
       "services/automation_composer.py",
       "services/bridge_handshake.py",
       "services/bridge_token_lifecycle.py",
+      "services/bootstrap/__init__.py",
+      "services/bootstrap/lifecycle.py",
+      "services/bootstrap/registration.py",
       "services/cache/__init__.py",
       "services/cache/ttl_cache.py",
       "services/callback_delivery.py",
@@ -248,6 +251,8 @@
       "services/plugins/manager.py",
       "services/pnginfo.py",
       "services/policy_posture.py",
+      "services/posture/__init__.py",
+      "services/posture/effective.py",
       "services/preflight.py",
       "services/presets/__init__.py",
       "services/presets/models.py",
@@ -434,6 +439,29 @@
       "owner": "architecture-maintainers",
       "rationale": "Existing boundary retained for compatibility while domain ownership is reduced.",
       "review_condition": "Remove when the importer no longer requires the higher-level domain."
+    }
+  ],
+  "facade_contracts": [
+    {
+      "facade": "services.startup_lifecycle",
+      "implementation": "services.bootstrap.lifecycle",
+      "owner": "architecture-maintainers",
+      "rationale": "Preserve accepted lifecycle imports, singleton identity, and patch seams while implementation ownership lives in the bootstrap package.",
+      "review_condition": "Review when the legacy startup_lifecycle import path can be removed without compatibility impact."
+    },
+    {
+      "facade": "services.route_bootstrap",
+      "implementation": "services.bootstrap.registration",
+      "owner": "architecture-maintainers",
+      "rationale": "Preserve accepted route-bootstrap imports and patch seams while implementation ownership lives in the bootstrap package.",
+      "review_condition": "Review when the legacy route_bootstrap import path can be removed without compatibility impact."
+    },
+    {
+      "facade": "services.effective_security_posture",
+      "implementation": "services.posture.effective",
+      "owner": "architecture-maintainers",
+      "rationale": "Preserve accepted posture imports and installed-snapshot identity while implementation ownership lives in the posture package.",
+      "review_condition": "Review when the legacy effective_security_posture import path can be removed without compatibility impact."
     }
   ],
   "accepted_cycles": [
