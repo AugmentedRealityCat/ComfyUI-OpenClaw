@@ -185,6 +185,7 @@ See full update history: [docs/release/recent_updates.md](docs/release/recent_up
   - [Reverse proxy and exposure notes](#reverse-proxy-and-exposure-notes)
 - [Nodes](#nodes)
   - [Native Media Inputs](#native-media-inputs)
+  - [Workflow Workspace Ownership](#workflow-workspace-ownership)
   - [Node Portability and Workflow Fallback](#node-portability-and-workflow-fallback)
 - [Extension UI](#extension-ui)
   - [Sidebar Modules](#sidebar-modules)
@@ -414,6 +415,21 @@ OpenClaw intentionally does not register duplicate video-decoder or camera-captu
 This keeps media decoding, browser device permission, and native `VIDEO` / `IMAGE`
 compatibility owned by ComfyUI and avoids adding a second ffmpeg or backend-device access
 path.
+
+### Workflow Workspace Ownership
+
+The ComfyUI Graph Canvas is the authoritative workspace for loading, arranging,
+inspecting, saving, and switching workflows. Use the host Workflows sidebar and tabs,
+drafts, and subgraphs so graph migrations, custom-node registration, active and modified
+state, and Desktop compatibility remain owned by ComfyUI.
+
+OpenClaw complements that workspace: Explorer, preflight, checkpoints, and portability or
+rewrite tools diagnose and guard workflows; Parameter Lab reads and replays bounded values
+through the active host graph; Jobs observes execution and results.
+
+OpenClaw intentionally does not create a second canvas, workflow store, serializer, or
+remote graph editor. Keeping one graph owner avoids divergent drafts, subgraph identifiers,
+widget state, and execution context.
 
 ### Node Portability and Workflow Fallback
 
