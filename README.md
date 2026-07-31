@@ -95,6 +95,9 @@ Deployment profiles and hardening references:
 
 - Added an executable production dependency boundary check that detects forbidden ownership
   direction, cycles, and dynamic-import drift without importing application modules.
+- Patched high-severity transitive frontend development dependencies and made local full-test,
+  pre-push, and CI security paths rebuild the exact lockfile tree before blocking high/critical
+  findings across production and development dependencies.
 - Startup health now exposes typed, redacted phase, readiness, retry, fatal, timing, and optional
   warmup outcomes.
 - Process-static deployment and security decisions now resolve once into an immutable,
@@ -814,7 +817,8 @@ The SOP already defines:
 
 - the docs-only exception for strictly documentation/planning/SOP changes
 - one-command full test scripts for Windows and Linux/WSL
-- supply-chain hardening checks and lockfile-driven frontend dependency installation
+- supply-chain hardening checks, lockfile-driven frontend dependency installation, and blocking
+  high/critical audits across production and development dependencies
 - pinned incremental Ruff/Mypy debt enforcement and deterministic scale regression baselines
 - the CI-parity backend coverage workflow with the governed 55% floor, retained release-cycle
   evidence, and required hotspot ownership
@@ -856,7 +860,10 @@ The connector currently remains an **optional attached subsystem inside this rep
 
 Read [SECURITY.md](docs/SECURITY.md) before exposing any endpoint beyond localhost. The project is designed to be secure-by-default (deny-by-default auth, SSRF protections, redaction, bounded outputs), but unsafe deployment can still create risk.
 
-Repository maintenance workflows also include supply-chain controls: CI/local validation scans declared dependencies and selected workspace persistence surfaces for known malicious indicators, frontend installs are lockfile-driven, and dependency manifest changes receive PR-time review.
+Repository maintenance workflows also include supply-chain controls: CI/local validation scans
+declared dependencies and selected workspace persistence surfaces for known malicious indicators,
+frontend installs are lockfile-driven, high/critical findings across production and development
+dependencies block acceptance, and dependency manifest changes receive PR-time review.
 
 ### Security Deployment Guide
 

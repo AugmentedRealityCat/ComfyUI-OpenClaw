@@ -12,10 +12,10 @@
 
 Only the latest version of ComfyUI-OpenClaw is supported for security updates.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| Latest  | :white_check_mark: |
-| < 0.2.0 | :x:                |
+| Version                  | Supported          |
+| ------------------------ | ------------------ |
+| Latest published release | :white_check_mark: |
+| All earlier releases     | :x:                |
 
 ## Reporting a Vulnerability
 

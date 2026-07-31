@@ -39,23 +39,27 @@ If the deployment enables remote control or bridge features, it must also pass *
 
 ### 3. Validation (Must Pass)
 
-Run the full regression suite:
+Run the complete OS-specific regression gate:
+
+```powershell
+# Windows
+powershell -File scripts/run_full_tests_windows.ps1
+```
 
 ```bash
-# 1. Secret Scanning
-./.venv/Scripts/python.exe -m pre_commit run detect-secrets --all-files
-
-# 2. Lint & Formatting
-./.venv/Scripts/python.exe -m pre_commit run --all-files --show-diff-on-failure
-
-# 3. Backend Unit Coverage Gate
-MOLTBOT_STATE_DIR="$(pwd)/moltbot_state/_local_unit" ./.venv/Scripts/python.exe scripts/run_backend_coverage.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json --coverage-json .tmp/coverage/backend_unit_coverage.json
-
-# 4. Frontend E2E (Unit/Integration)
-# Ensure Node 18+
-node -v
-npm test
+# Linux / WSL
+bash scripts/run_full_tests_linux.sh
 ```
+
+These scripts execute the authoritative `tests/TEST_SOP.md` sequence, including fresh
+lockfile reconciliation with `npm ci`, the blocking
+`npm audit --audit-level=high` check across production and development dependencies,
+secret scanning, pre-commit hooks, governance and backend lanes, adaptive adversarial
+validation, and frontend Playwright E2E. A standalone `npm test` result is not a
+substitute for the complete release gate.
+
+If staged/manual execution is required, follow the explicit command order in
+`tests/TEST_SOP.md`; do not maintain a shortened release-only sequence here.
 
 ---
 

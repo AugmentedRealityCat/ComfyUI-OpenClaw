@@ -12,6 +12,10 @@ Newest entries appear first.
 - Added a dependency-light production source verifier to pre-commit. It parses tracked Python
   imports without importing application modules and fails on unknown ownership, forbidden
   dependency direction, cycles, and unreviewed dynamic imports.
+- Patched transitive frontend development dependencies `ws`, `postcss`, and resolver-owned
+  `nanoid` without changing the root manifest or runtime dependency boundary. Windows/Linux
+  full-test, pre-push, and CI security paths now run a fresh `npm ci` and block high/critical
+  findings across the complete production and development dependency tree.
 - Replaced coarse startup reporting with typed, redacted phase and state outcomes, bounded retry
   and timing metadata, and explicit optional warmup results.
 - Consolidated process-static deployment and security decisions into one immutable, secret-free
