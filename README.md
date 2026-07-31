@@ -91,6 +91,40 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Startup, security posture, and architecture boundaries hardened</strong></summary>
+
+- Added an executable production dependency boundary check that detects forbidden ownership
+  direction, cycles, and dynamic-import drift without importing application modules.
+- Startup health now exposes typed, redacted phase, readiness, retry, fatal, timing, and optional
+  warmup outcomes.
+- Process-static deployment and security decisions now resolve once into an immutable,
+  secret-free posture snapshot reused across startup and authorization boundaries.
+- Bootstrap lifecycle, route registration, and effective posture implementations now live in
+  focused owner packages while legacy import identities remain compatible.
+- The public systemd environment template now follows `.env.example` conventions, while
+  secret-bearing deployment environment files remain excluded from version control.
+
+</details>
+
+<details>
+
+<summary><strong>Host alignment, Parameter Lab, and native workflow ownership refreshed</strong></summary>
+
+- Legacy fixed-bundle Desktop and current managed-install Comfy-Desktop are modeled separately;
+  current bridge presence is detected without granting privileged capability access.
+- ComfyUI's `datasets` user-data root is excluded from model inventory and Model Manager
+  destinations.
+- Parameter Lab now accepts only bounded scalar values and correlates queued runs through exact
+  request-ID receipts, failing explicitly on unsupported or ambiguous host queue shapes.
+- Advanced 3D `result` references are recognized as bounded output links without inspecting
+  later metadata or rendering binary content.
+- Native ComfyUI video/webcam inputs, audio and text-to-speech flows, and the Graph/Workflows
+  workspace remain host-owned instead of being duplicated by OpenClaw.
+
+</details>
+
+<details>
+
 <summary><strong>Maintainability, scale safeguards, and verification governance strengthened</strong></summary>
 
 - Added pinned incremental Ruff and Mypy enforcement that blocks new production-code debt in
@@ -137,33 +171,6 @@ Deployment profiles and hardening references:
 - Single-job cancellation on older hosts can fall back only to targeted interrupt; multi-job cancellation failures no longer degrade into a global interrupt.
 - Compatibility guard coverage now documents SaveImage-style output refs, 3D preview refs, typed asset dimensions, grouped asset behavior, sidebar registration fallback, and the OpenClaw Node.js runtime policy.
 - OpenClaw keeps its own package/test harness on Node.js `>=18.0.0` while documenting that standalone ComfyUI frontend development may require a newer Node engine.
-
-</details>
-
-<details>
-
-<summary><strong>Package hygiene, runtime cache ownership, and tool diagnostics tightened</strong></summary>
-
-- Moved developer-only verification helpers out of the package root and into the dedicated developer tooling area, keeping the shipped custom-node pack boundary clearer.
-- The default external-tool allowlist now resolves from the package-owned `data/tools_allowlist.json`; custom allowlists should use `OPENCLAW_TOOLS_CONFIG_PATH` instead of relying on state-directory shadow files.
-- Runtime cache and external-tool sandbox scratch paths are treated as state-directory-owned generated data, while repo-local `.tmp`, virtualenv, and frontend dependency folders remain regenerated local tooling artifacts.
-- External-tool failures now have deterministic service-level diagnostics for missing sandbox runtime, missing executable/interpreter, timeout, workspace/path violation, and process failure, without adding Docker or broad fallback execution.
-- Python formatter/import-order settings and targeted package-hygiene regressions were aligned so validation catches future root clutter, package-resource, and runtime-cache ownership drift.
-
-</details>
-
-<details>
-
-<summary><strong>ComfyUI host compatibility, media outputs, model folders, and prompt attribution refreshed</strong></summary>
-
-- Refreshed the published compatibility baseline for ComfyUI `9cf91339` (`v0.29.0-12-g9cf91339`, pyproject `0.29.0`), standalone frontend `1.49.1` (`4b3866b838`, `v1.49.1-19-g4b3866b838`), legacy Desktop `0.9.4` with fixed core `0.22.3` plus frontend `1.43.18`, and current Comfy-Desktop `1.0.32-rc.1` (`85e28b7a`, `v1.0.32-rc.1-3-g85e28b7`) whose hosted versions are installation-specific.
-- Reconciled active prompt state after backend or SSE reconnects so completed prompts are not left in the active queue lane after a host recovery.
-- Updated sidebar registration to prefer the current ComfyUI sidebar store API and keep the deprecated frontend facade as a compatibility fallback for older hosts.
-- Aligned Model Manager and preflight diagnostics with current ComfyUI model folder names, including newer managed keys such as `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`, while retaining legacy aliases such as `clip` and `unet`.
-- Made output parsing media-aware for current previewable result groups (`images`, `video`, `audio`, `3d`, and bounded `text`) while keeping image callbacks compatible, supporting optional hash-backed refs when host metadata is present, and keeping asset-only identifiers as explicit fallback states instead of silently upgrading to `/api/assets`.
-- Added Job Monitor support for allowlisted text files under the host `files` output key. Previews use same-origin `/view`, a 5-second timeout, strict textual MIME and UTF-8 checks, a 64-KiB streaming cap, a 4,096-character display cap, and literal text rendering; rejected or unsupported responses keep an explicit source link.
-- OpenClaw prompt submissions now include stable `comfy_usage_source` attribution when missing, without overwriting caller-provided attribution or copying prompt/tenant/trace content into that field.
-- Updated public release/support/troubleshooting docs to match the refreshed host facts and avoid exposing maintainer-only planning paths or machine-local links.
 
 </details>
 
@@ -481,7 +488,12 @@ New shell/tab wiring should use the shared text-safe DOM helpers in `web/opencla
 
 Canonical DOM/class ownership is now centered on `openclaw-*`; legacy `moltbot-*` class compatibility is still supported through shared runtime aliasing instead of duplicated markup in each tab template.
 
-The sidebar now also resolves and stamps its active host surface (`standalone_frontend` vs legacy desktop-embedded host) and reference metadata at mount time, so Desktop `0.9.4` embedded-frontend lag against standalone frontend `1.49.1` is explicit and testable. It also publishes the current Comfy-Desktop `1.0.32-rc.1` managed-install reference without claiming fixed hosted component versions or enabling its dedicated runtime adapter early.
+The sidebar now also resolves and stamps its active host surface (`standalone_frontend`, legacy
+`desktop`, or current managed-install `comfy_desktop`) and reference metadata at mount time, so
+Desktop `0.9.4` embedded-frontend lag against standalone frontend `1.49.1` is explicit and
+testable. The current Comfy-Desktop `1.0.32-rc.1` reference keeps hosted component versions
+installation-specific and recognizes `window.__comfyDesktop2` as presence metadata only; bridge
+detection does not authorize privileged capability calls.
 
 Sidebar registration prefers ComfyUI's current sidebar store API and falls back to the deprecated frontend facade when running on older host bundles. Hosts without either sidebar API use the legacy menu fallback instead of failing extension setup.
 
@@ -503,7 +515,7 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows, including snapshot-first inventory refresh state (`snapshot_ts`, `scan_state`, `stale`, `last_error`) and suppressed inactive-branch findings. | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [API Overview](#api-overview) |
 | `PNG Info` | Inspects saved generation images through drag-and-drop, file picker, or scoped paste, parses A1111 infotext plus ComfyUI `prompt` / `workflow` metadata, shows extracted prompt and generation fields when recoverable, and keeps raw metadata visible for operator inspection. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
-| `Model Manager` | Searches model catalog/install records, queues managed downloads, monitors task lifecycle, and imports completed tasks into the managed install root with current ComfyUI folder-key normalization, including `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`, plus legacy type aliases. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
+| `Model Manager` | Searches model catalog/install records, queues managed downloads, monitors task lifecycle, and imports completed tasks into the managed install root with current ComfyUI folder-key normalization, including `gligen`, `latent_upscale_models`, `hypernetworks`, `photomaker`, `model_patches`, `geometry_estimation`, and `detection`, plus legacy type aliases. User-managed `datasets` remain outside model inventory and install destinations. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
 | `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph while preserving non-numeric host node IDs. | [Operator UX Features](#operator-ux-features) |
 
 ## Operator UX Features
@@ -540,6 +552,11 @@ Parameter Lab now supports experiment history and run replay:
 - `History` lists saved experiments from local state.
 - `Load` opens stored experiment details and run statuses.
 - `Replay` applies a selected run's parameter values back into the active workflow graph without coercing string or non-numeric host node IDs.
+- Sweep and compare inputs accept bounded strings, booleans, and finite numbers; structured values
+  and unsupported sweep strategies fail validation instead of being guessed or silently coerced.
+- Queued runs use request-ID-correlated receipts to bind the exact host prompt ID. Unsupported,
+  malformed, busy, or ambiguous host queue boundaries fail explicitly rather than borrowing a
+  globally recent prompt.
 
 This makes iterative tuning and backtracking faster without manually retyping prior parameter sets.
 

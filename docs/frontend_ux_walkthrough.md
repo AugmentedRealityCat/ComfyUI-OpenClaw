@@ -20,7 +20,9 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 - Settings: `web/tabs/settings_tab.js` composes status, LLM, secrets, logs, and DOM owner modules.
   Its lifecycle owner invalidates stale async generations and clears scheduled work when the tab
   is disposed, preventing late responses from mutating a remounted pane.
-- Host surface: `web/openclaw_host_surface.js` resolves the active frontend host surface and stamps explicit metadata so standalone frontend vs desktop-embedded behavior stays testable.
+- Host surface: `web/openclaw_host_surface.js` resolves standalone frontend, legacy fixed-bundle
+  Desktop, and current managed-install Comfy-Desktop separately, then stamps explicit metadata so
+  generation-specific behavior stays testable.
 - Output refs: `web/openclaw_asset_refs.js` normalizes classic history refs, optional `asset_hash`/`hash` refs when host metadata is present, and current previewable media groups (`images`, `video`, `audio`, `3d`, bounded inline or file-backed `text`) onto one media-aware contract. Allowlisted text files under the host `files` key stay on same-origin `/view` and use a 5-second, 64-KiB streaming, strict textual-MIME/UTF-8 reader with a 4,096-character display cap. HDR `.exr` / `.hdr` image refs show source-preview fallback links instead of normal thumbnails, text reaches the DOM only as literal text, and asset-service-only refs remain explicit fallback states instead of silently auto-fetching `/api/assets`.
 - Styles: `web/openclaw.css` provides shared design tokens and component classes.
 - Errors and compatibility helpers: `web/openclaw_utils.js` provides `showError()` / `clearError()` plus runtime legacy-class alias helpers used to keep canonical `openclaw-*` markup compatible with existing `moltbot-*` selectors.
@@ -36,6 +38,9 @@ Refactor note:
 - New host sidebar registration changes should stay in `web/openclaw_sidebar_registration.js` rather than duplicating ComfyUI frontend API detection inside the extension entrypoint.
 - Host-sensitive behaviors should consume the shared host-surface helper rather than inferring desktop vs standalone frontend from ad-hoc globals.
 - Graph/widget flows should preserve host-shaped promoted-widget source metadata and non-numeric node IDs, including Parameter Lab replay/apply paths.
+- Parameter Lab flows should keep scalar/count/byte validation aligned with the backend policy and
+  use exact request-ID queue receipts; they must not infer prompt ownership from a globally recent
+  prompt when the host request boundary is unsupported or ambiguous.
 - Output preview flows should consume the shared asset-ref normalizer rather than assembling `/view` URLs independently in each tab, treating non-image or HDR media as broken images, or silently widening runtime behavior to direct `/api/assets` fetches.
 - Explorer/preflight consumers should treat inventory diagnostics as snapshot-first and surface `snapshot_ts`, `scan_state`, `stale`, and `last_error` instead of blocking the UI on full rescans.
 - Explorer/preflight rendering should keep actionable missing-node/model failures separate from suppressed inactive-branch findings returned by the backend.
@@ -56,9 +61,15 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 
 ## Host-Surface Contract
 
-- OpenClaw treats standalone `ComfyUI_frontend` and `desktop` as distinct frontend host surfaces.
+- OpenClaw treats standalone `ComfyUI_frontend`, legacy fixed-bundle `desktop`, and current
+  managed-install `comfy_desktop` as distinct frontend host surfaces.
 - The sidebar stamps its resolved host surface and refreshed host-reference metadata at mount time so desktop bundle drift is explicit in diagnostics and regression tests.
-- The standalone Remote Admin Console now stamps the same host-surface metadata on its document root, including legacy Desktop `0.9.4`, fixed core `0.22.3`, embedded frontend `1.43.18`, and lagging parity relative to standalone frontend `1.49.1`. It also exposes the current Comfy-Desktop `1.0.32-rc.1` managed-install reference with `installation_specific` hosted versions, without activating its dedicated runtime adapter.
+- The standalone Remote Admin Console stamps the same host-surface metadata on its document root,
+  including legacy Desktop `0.9.4`, fixed core `0.22.3`, embedded frontend `1.43.18`, and lagging
+  parity relative to standalone frontend `1.49.1`. It also exposes current Comfy-Desktop
+  `1.0.32-rc.1` with `installation_specific` hosted versions. Presence of
+  `window.__comfyDesktop2` identifies that host generation only; it does not authorize privileged
+  capability calls or inspect bridge members.
 - Graph/widget compatibility code should route through shared host helpers to keep nested-subgraph and promoted-widget behavior aligned with current upstream host semantics, including preserving source metadata and string-shaped node IDs.
 
 ## Standalone Remote Admin Console
@@ -96,9 +107,12 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 4. Planner: click **Plan Generation** with minimal input and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
 5. Refiner: click **Refine Prompts** (with or without image) and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
 6. Jobs: verify output previews still resolve for classic history refs, optional hash-backed refs when host metadata is present, and supported media-aware refs (`images`, `video`, `audio`, `3d`, bounded inline/file-backed `text`); allowlisted text files should show literal bounded content or a deterministic source-link fallback, HDR `.exr` / `.hdr` image refs should render as explicit source-preview fallback links, asset-service-only refs should stay explicit as a bounded fallback state, and repeated polls should not duplicate rows after reconnect/resume.
-7. Explorer: verify preflight inventory can show `refreshing` / `stale` / `error` state without freezing the tab while deep scan work continues, and verify inactive-branch suppressed findings render separately from actionable failures.
-8. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
-9. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
+7. Parameter Lab: verify bounded scalar sweep/compare values queue with an exact request receipt,
+   and verify unsupported structured values or unknown host queue-event shapes fail visibly without
+   assigning another prompt's lifecycle.
+8. Explorer: verify preflight inventory can show `refreshing` / `stale` / `error` state without freezing the tab while deep scan work continues, and verify inactive-branch suppressed findings render separately from actionable failures.
+9. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
+10. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
 
 ## E2E (Playwright) Checks
 

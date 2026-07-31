@@ -7,6 +7,46 @@ Newest entries appear first.
 
 <details>
 
+<summary><strong>Startup, security posture, and architecture boundaries hardened</strong></summary>
+
+- Added a dependency-light production source verifier to pre-commit. It parses tracked Python
+  imports without importing application modules and fails on unknown ownership, forbidden
+  dependency direction, cycles, and unreviewed dynamic imports.
+- Replaced coarse startup reporting with typed, redacted phase and state outcomes, bounded retry
+  and timing metadata, and explicit optional warmup results.
+- Consolidated process-static deployment and security decisions into one immutable, secret-free
+  effective posture snapshot reused by startup, control-plane, and surface guards.
+- Moved startup lifecycle, route registration, and effective posture implementations into focused
+  service-domain owner packages while preserving legacy module identity aliases.
+- Replaced the public systemd environment file with an `.env.example`-style template and retained
+  a hard version-control boundary around secret-bearing environment files.
+
+</details>
+
+<details>
+
+<summary><strong>Host alignment, Parameter Lab, and native workflow ownership refreshed</strong></summary>
+
+- Split host metadata between legacy fixed-bundle Desktop and current managed-install
+  Comfy-Desktop. Presence of `window.__comfyDesktop2` identifies the current host generation but
+  never authorizes privileged bridge capability calls.
+- Excluded ComfyUI's `datasets` user-data root from model inventory and Model Manager destination
+  handling so training data is not treated as managed model weights.
+- Bounded Parameter Lab creation and persistence to string, boolean, integer, and finite-number
+  values, with byte/count limits, grid-only sweep validation, and explicit rejection of nested or
+  ambiguous values.
+- Correlated Parameter Lab queue ownership through reviewed `promptQueueing` / `promptQueued`
+  request IDs and transient workflow receipts, failing closed on unsupported, malformed, busy, or
+  ambiguous host queue boundaries.
+- Recognized advanced 3D `result` references as bounded source links without consuming later
+  metadata or rendering binary content.
+- Documented native ComfyUI ownership for video/webcam inputs, audio and text-to-speech flows, and
+  the Graph/Workflows workspace instead of introducing duplicate OpenClaw node or workspace stacks.
+
+</details>
+
+<details>
+
 <summary><strong>Maintainability, scale safeguards, and verification governance strengthened</strong></summary>
 
 - Added a pinned incremental Ruff/Mypy policy to local, pre-commit, and CI validation. Existing

@@ -6,6 +6,8 @@ This guide explains the startup security model and bridge compatibility behavior
 
 - Runtime profile selection
 - Hardened startup enforcement behavior
+- Typed startup lifecycle diagnostics
+- Process-static effective security posture
 - External tool sandbox diagnostics
 - Module startup boundaries
 - Bridge protocol handshake compatibility
@@ -53,17 +55,47 @@ If a critical startup gate fails, initialization aborts deterministically instea
 
 The health response includes a `startup` diagnostic object with:
 
-- `state`: `starting`, `ready`, `degraded-warmup`, or `fatal-startup`
+- `schema_version`: diagnostic schema version
+- `phase`: `package_import`, `required_initialization`, `host_wait`,
+  `route_registration`, `complete`, or `optional_warmup`
+- `state`: `starting`, `initializing`, `waiting_for_host`, `registering_routes`, `ready`,
+  `degraded`, or `fatal`
+- `reason_code`: stable, content-free transition reason
 - `ready`: whether required route/service startup completed
-- `fatal`: bounded fatal-startup details when required startup fails
-- `warmups`: bounded status for optional background warmups
+- `degraded` and `fatal`: explicit terminal posture flags
+- `attempt` and `max_attempts`: bounded host-wait retry progress
+- `elapsed_ms`, `phase_elapsed_ms`, and `ready_elapsed_ms`: bounded lifecycle timing
+- `warmups`: bounded optional warmup entries with name, state, reason, timeout, and duration
 
-Required startup work still fails closed. Optional warmups such as model inventory refresh run after route registration and do not block baseline API availability. Their failures or timeouts are reported as `degraded-warmup`.
+Required startup work still fails closed. Optional warmups such as model inventory refresh run after
+route registration and do not block baseline API availability. A failed or timed-out optional
+warmup changes the startup state to `degraded`; individual warmup states are `pending`, `running`,
+`succeeded`, `failed`, or `timed_out`.
 
 Optional warmup timeout can be tuned with:
 
 - `OPENCLAW_STARTUP_WARMUP_TIMEOUT_SEC`
 - legacy alias: `MOLTBOT_STARTUP_WARMUP_TIMEOUT_SEC`
+
+### Effective security posture snapshot
+
+During the process-wide route bootstrap, OpenClaw resolves deployment, runtime, connector,
+control-plane, and surface decisions once into an immutable `EffectiveSecurityPosture` snapshot.
+The snapshot records configuration presence and stable decision codes, not secret values.
+
+Startup gates, control-plane policy, and surface authorization reuse this same object identity so
+process-static security decisions cannot drift between modules. Request-dynamic controls such as
+authentication, replay checks, and rate limiting still evaluate each request using their normal
+runtime inputs.
+
+The owner modules are:
+
+- `services/bootstrap/lifecycle.py`
+- `services/bootstrap/registration.py`
+- `services/posture/effective.py`
+
+Legacy imports remain identity-preserving aliases. See
+[Service Domain Packages](architecture/service_domain_packages.md) for the ownership contract.
 
 ## Public deployment shared-surface acknowledgement
 

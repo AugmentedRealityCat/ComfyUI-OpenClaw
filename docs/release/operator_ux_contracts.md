@@ -122,7 +122,7 @@ interface ContextAction {
 }
 ```
 
-## 3. Parameter Lab (F52)
+## 3. Parameter Lab
 
 Contracts for bounded parameter sweeps and experiment orchestration.
 
@@ -135,17 +135,15 @@ Contracts for bounded parameter sweeps and experiment orchestration.
     {
       "node_id": "10",
       "widget_name": "cfg",
-      "values": [6.0, 7.0, 8.0]
+      "values": [6.0, 7.0, 8.0],
+      "strategy": "grid"
     },
     {
-      "node_id": "3",
+      "node_id": "loader-alpha",
       "widget_name": "seed",
-      "strategy": "random",
-      "count": 3
+      "values": [41, 42]
     }
-  ],
-  "max_runs": 20,
-  "batch_size": 1
+  ]
 }
 ```
 
@@ -153,6 +151,22 @@ Contract notes:
 
 - `node_id` is a string-preserving host graph identifier. It may be numeric text such as `"10"` or a non-numeric host ID, and clients must not coerce it to a number when storing, comparing, or replaying experiment parameters.
 - Experiment parameter keys such as `"10.cfg"` are display/storage keys derived from the original `node_id` plus `widget_name`; they are not a separate numeric node contract.
+- Sweep values are limited to bounded strings, booleans, integers, and finite numbers. Null,
+  arrays, objects, non-finite numbers, overlong strings, presentation-ambiguous duplicates, and
+  unsupported strategies fail validation instead of being coerced.
+- Sweep creation supports `grid` strategy only. The backend policy is authoritative and limits a
+  request to 5 MiB, workflow text to 4 MiB, eight dimensions, 50 values per dimension, and 50
+  generated combinations. Compare creation accepts at most eight scalar items.
+
+### Queue ownership receipt
+
+- The coordinator observes the host's reviewed `promptQueueing` and `promptQueued` request
+  boundaries, correlating their integer `requestId` and `batchCount` fields.
+- It writes a transient UUID receipt only into the matching serialized workflow and returns the
+  exact `promptId` / `requestId` pair used to route bounded lifecycle event metadata.
+- Unsupported event APIs, malformed or missing boundaries, pre-existing unobserved host queue
+  activity, receipt collisions, timeouts, and ambiguous batch ownership fail explicitly. There is
+  no fallback to a globally recent prompt ID.
 
 ### Experiment Result Schema (JSON)
 

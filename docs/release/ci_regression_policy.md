@@ -8,6 +8,7 @@ All pull requests must pass the repository SOP gate before merge.
 | --- | --- | --- |
 | Secret detection | `pre-commit run detect-secrets --all-files` | Prevent secret leakage |
 | Pre-commit hooks | `pre-commit run --all-files --show-diff-on-failure` | Enforce formatting and static checks |
+| Production dependency boundary | `python scripts/verify_production_dependencies.py` | Parse tracked production imports without importing modules; block ownership, direction, cycle, and dynamic-import drift |
 | Frontend dependency audit | `npm audit --production` | Fail on production dependency vulnerabilities in the shipped Node dependency surface |
 | Backend dependency audit | `pip-audit -r requirements.txt` | Audit declared Python project dependencies without scanning unrelated CI runner/toolchain packages |
 | GitHub CodeQL analysis | `.github/workflows/codeql.yml` | Run repository-native static security analysis for Python, JavaScript/TypeScript, and GitHub Actions on push, pull request, and weekly schedule |
