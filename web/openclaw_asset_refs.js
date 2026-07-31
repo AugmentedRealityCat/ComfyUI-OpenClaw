@@ -1,7 +1,21 @@
 const PREVIEWABLE_MEDIA_TYPES = new Set(["images", "video", "audio", "3d", "text"]);
-const THREE_D_EXTENSIONS = [".obj", ".fbx", ".gltf", ".glb", ".usdz"];
+const THREE_D_EXTENSIONS = [
+    ".obj",
+    ".fbx",
+    ".gltf",
+    ".glb",
+    ".stl",
+    ".ply",
+    ".spz",
+    ".splat",
+    ".ksplat",
+    ".usdz",
+];
 const HDR_IMAGE_EXTENSIONS = [".exr", ".hdr"];
 const TEXT_PREVIEW_MAX_LENGTH = 1024;
+const ADVANCED_3D_RESULT_MAX_ENTRIES = 8;
+const ADVANCED_3D_RESULT_PATH_MAX_LENGTH = 1024;
+const UNSAFE_ADVANCED_3D_PATH_CHARACTERS = /[\p{Cc}\p{Cf}\p{Cs}]/u;
 const FILE_TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "csv", "yaml", "yml", "xml", "log"]);
 const FILE_OUTPUT_TYPES = new Set(["input", "output", "temp"]);
 const FILE_OUTPUT_MAX_REFS = 64;
@@ -151,6 +165,62 @@ function hasUnsafeFileCharacters(value = "") {
 
 function codePointLength(value = "") {
     return Array.from(String(value)).length;
+}
+
+function hasUnsafeAdvanced3dPathCharacters(value = "") {
+    return UNSAFE_ADVANCED_3D_PATH_CHARACTERS.test(String(value));
+}
+
+function normalizeAdvanced3dResult(result) {
+    if (
+        !Array.isArray(result)
+        || result.length === 0
+        || result.length > ADVANCED_3D_RESULT_MAX_ENTRIES
+    ) {
+        return null;
+    }
+
+    const rawPath = result[0];
+    if (
+        typeof rawPath !== "string"
+        || codePointLength(rawPath) > ADVANCED_3D_RESULT_PATH_MAX_LENGTH
+    ) {
+        return null;
+    }
+
+    const normalizedPath = rawPath.replaceAll("\\", "/");
+    if (
+        !normalizedPath
+        || codePointLength(normalizedPath) > ADVANCED_3D_RESULT_PATH_MAX_LENGTH
+        || hasUnsafeAdvanced3dPathCharacters(normalizedPath)
+        || normalizedPath.startsWith("/")
+        || [":", "%", "?", "#"].some((marker) => normalizedPath.includes(marker))
+    ) {
+        return null;
+    }
+
+    const segments = normalizedPath.split("/");
+    if (segments.some((segment) => (
+        !segment
+        || segment === "."
+        || segment === ".."
+        || segment !== segment.trim()
+    ))) {
+        return null;
+    }
+
+    const filename = segments.at(-1);
+    if (!has3dExtension(filename)) {
+        return null;
+    }
+
+    // SECURITY: later result entries may contain private host metadata. Never
+    // inspect or project anything except the validated path at index zero.
+    return normalizeComfyOutputRef({
+        filename,
+        subfolder: segments.slice(0, -1).join("/"),
+        type: "output",
+    }, "3d");
 }
 
 function normalizeFileTextOutputRef(outputRef) {
@@ -322,6 +392,11 @@ export function extractHistoryOutputRefs(historyItem = {}) {
                     results.push(normalized);
                 }
             }
+        }
+
+        const advanced3dRef = normalizeAdvanced3dResult(nodeOutput.result);
+        if (advanced3dRef) {
+            results.push(advanced3dRef);
         }
 
         const fileRefs = nodeOutput.files;

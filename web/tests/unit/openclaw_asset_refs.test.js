@@ -433,6 +433,140 @@ describe("openclaw asset refs", () => {
         }
     });
 
+    it("normalizes only the bounded official advanced 3d result path", () => {
+        const metadataCanary = "metadata-value-must-not-project";
+        const explosiveMetadata = new Proxy({}, {
+            get() {
+                throw new Error("later result metadata was inspected");
+            },
+            ownKeys() {
+                throw new Error("later result metadata was inspected");
+            },
+        });
+        const guardedResult = new Proxy([
+            "models/scene one.splat",
+            explosiveMetadata,
+            [{ model: metadataCanary }],
+        ], {
+            get(target, property, receiver) {
+                if (property === "1" || property === "2") {
+                    throw new Error("later result entries were inspected");
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
+        const outputs = extractHistoryOutputRefs({
+            outputs: {
+                "9": {
+                    result: guardedResult,
+                },
+            },
+        });
+
+        expect(outputs).toHaveLength(1);
+        expect(outputs[0]).toEqual(expect.objectContaining({
+            filename: "scene one.splat",
+            subfolder: "models",
+            type: "output",
+            media_type: "3d",
+            asset_hash: "",
+            asset_api_id: "",
+            asset_api_required: false,
+            resolution: "view",
+            viewParams: {
+                filename: "scene one.splat",
+                subfolder: "models",
+                type: "output",
+            },
+        }));
+        expect(JSON.stringify(outputs[0])).not.toContain(metadataCanary);
+    });
+
+    it("keeps advanced 3d suffix and path parity with the backend", () => {
+        const suffixes = [
+            "glb",
+            "gltf",
+            "obj",
+            "fbx",
+            "stl",
+            "ply",
+            "spz",
+            "splat",
+            "ksplat",
+            "usdz",
+        ];
+        const outputs = extractHistoryOutputRefs({
+            outputs: Object.fromEntries(suffixes.map((suffix, index) => [
+                String(index),
+                {
+                    result: [
+                        index === 0
+                            ? `nested\\folder\\scene.${suffix.toUpperCase()}`
+                            : `nested/scene.${suffix.toUpperCase()}`,
+                    ],
+                },
+            ])),
+        });
+
+        expect(outputs).toHaveLength(suffixes.length);
+        expect(outputs.every((output) => output.media_type === "3d")).toBe(true);
+        expect(outputs[0]).toEqual(expect.objectContaining({
+            filename: "scene.GLB",
+            subfolder: "nested/folder",
+        }));
+        expect(outputs.map((output) => output.filename.split(".").pop().toLowerCase())).toEqual(suffixes);
+        expect(extractHistoryOutputRefs({
+            outputs: { "unicode": { result: ["模型/場景😀.glb"] } },
+        })[0]).toEqual(expect.objectContaining({
+            filename: "場景😀.glb",
+            subfolder: "模型",
+        }));
+    });
+
+    it("rejects unsafe advanced 3d result containers and first paths", () => {
+        const maxPath = `${"a".repeat(1024 - ".glb".length)}.glb`;
+        expect(extractHistoryOutputRefs({
+            outputs: { "9": { result: [maxPath, {}, {}, {}, {}, {}, {}, {}] } },
+        })).toHaveLength(1);
+
+        const rejected = [
+            null,
+            "scene.glb",
+            {},
+            [],
+            [null],
+            [123],
+            [""],
+            ["   "],
+            [" scene.glb"],
+            ["scene.glb "],
+            ["\u00a0scene.glb"],
+            ["scene.glb", {}, {}, {}, {}, {}, {}, {}, {}],
+            [`${"a".repeat(1025 - ".glb".length)}.glb`],
+            ["/absolute/scene.glb"],
+            ["//evil.example/scene.glb"],
+            ["https://evil.example/scene.glb"],
+            ["file:scene.glb"],
+            ["C:\\private\\scene.glb"],
+            ["../scene.glb"],
+            ["safe/../scene.glb"],
+            ["safe/./scene.glb"],
+            ["safe//scene.glb"],
+            ["safe/\u0000scene.glb"],
+            ["safe/\u0085scene.glb"],
+            ["safe/\u202escene.glb"],
+            ["safe/\ud800scene.glb"],
+            ["scene.glb?token=secret"],
+            ["scene.png"],
+            ["scene.glb.exe"],
+        ];
+        for (const result of rejected) {
+            expect(extractHistoryOutputRefs({
+                outputs: { "9": { result } },
+            })).toEqual([]);
+        }
+    });
+
     it("detects HDR image refs by filename suffix without treating hashes as HDR", () => {
         expect(isHdrImageFilename("render.EXR")).toBe(true);
         expect(isHdrImageFilename("studio.hdr")).toBe(true);

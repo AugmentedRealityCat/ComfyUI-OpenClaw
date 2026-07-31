@@ -6,6 +6,7 @@ Parses ComfyUI /history/{prompt_id} responses and extracts image output metadata
 import json
 import logging
 import os
+import unicodedata
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
@@ -24,7 +25,20 @@ COMFYUI_URL = (
 )
 HISTORY_TIMEOUT = 5
 PREVIEWABLE_MEDIA_TYPES = ("images", "video", "audio", "3d", "text")
-THREE_D_EXTENSIONS = (".obj", ".fbx", ".gltf", ".glb", ".usdz")
+THREE_D_EXTENSIONS = (
+    ".obj",
+    ".fbx",
+    ".gltf",
+    ".glb",
+    ".stl",
+    ".ply",
+    ".spz",
+    ".splat",
+    ".ksplat",
+    ".usdz",
+)
+ADVANCED_3D_RESULT_MAX_ENTRIES = 8
+ADVANCED_3D_RESULT_PATH_MAX_LENGTH = 1024
 TEXT_PREVIEW_MAX_LENGTH = 1024
 FILE_TEXT_EXTENSIONS = frozenset(
     {"txt", "md", "markdown", "json", "csv", "yaml", "yml", "xml", "log"}
@@ -95,6 +109,58 @@ def _normalize_text_content(value: Any) -> Optional[Dict[str, Any]]:
 
 def _has_unsafe_file_characters(value: str) -> bool:
     return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _has_unsafe_advanced_3d_characters(value: str) -> bool:
+    return any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in value)
+
+
+def _normalize_advanced_3d_result(result: Any) -> dict[str, Any] | None:
+    if (
+        not isinstance(result, list)
+        or not result
+        or len(result) > ADVANCED_3D_RESULT_MAX_ENTRIES
+    ):
+        return None
+
+    raw_path = result[0]
+    if (
+        not isinstance(raw_path, str)
+        or len(raw_path) > ADVANCED_3D_RESULT_PATH_MAX_LENGTH
+    ):
+        return None
+
+    normalized_path = raw_path.replace("\\", "/")
+    if (
+        not normalized_path
+        or len(normalized_path) > ADVANCED_3D_RESULT_PATH_MAX_LENGTH
+        or _has_unsafe_advanced_3d_characters(normalized_path)
+        or normalized_path.startswith("/")
+        or any(marker in normalized_path for marker in (":", "%", "?", "#"))
+    ):
+        return None
+
+    segments = normalized_path.split("/")
+    if any(
+        not segment or segment in {".", ".."} or segment != segment.strip()
+        for segment in segments
+    ):
+        return None
+
+    filename = segments[-1]
+    if not _has_3d_extension(filename):
+        return None
+
+    # SECURITY: result metadata is untrusted and may contain private host state.
+    # Inspect only the validated path at index zero; never project later entries.
+    return normalize_history_output_ref(
+        {
+            "filename": filename,
+            "subfolder": "/".join(segments[:-1]),
+            "type": "output",
+        },
+        "3d",
+    )
 
 
 def _normalize_file_text_ref(output_ref: Any) -> Optional[Dict[str, Any]]:
@@ -274,6 +340,10 @@ def extract_output_refs(history_item: Dict[str, Any]) -> List[Dict[str, Any]]:
                 normalized = normalize_history_output_ref(ref, media_type)
                 if normalized:
                     results.append(normalized)
+
+        advanced_3d_ref = _normalize_advanced_3d_result(node_output.get("result"))
+        if advanced_3d_ref:
+            results.append(advanced_3d_ref)
 
         file_refs = node_output.get("files")
         if isinstance(file_refs, list) and len(file_refs) <= FILE_OUTPUT_MAX_REFS:
