@@ -249,7 +249,10 @@ Then every `git push` will run:
 bash scripts/pre_push_checks.sh
 ```
 
-`scripts/pre_push_checks.sh` is the CI-parity guard and must include all 9 stages:
+`scripts/pre_push_checks.sh` is the CI-parity guard and must reconcile the exact
+frontend lockfile with `npm ci`, then block high-severity findings across production
+and development dependencies with `npm audit --audit-level=high`, before the 9
+behavioral and governance stages:
 
 1) `detect-secrets`
 2) all `pre-commit` hooks
@@ -393,6 +396,10 @@ node -v
 #   node -v
 #
 # IMPORTANT: run `npm ci` with the same Node version you use for `npm test`.
+npm ci
+
+# Development tooling is part of the acceptance trust boundary.
+npm audit --audit-level=high
 
 # One-time browser install (recommended)
 npx playwright install chromium

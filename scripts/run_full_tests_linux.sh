@@ -87,10 +87,9 @@ require_cmd node
 require_cmd npm
 
 ensure_npm_deps() {
-  if [ -f "$ROOT_DIR/node_modules/@playwright/test/package.json" ]; then
-    return 0
-  fi
-  echo "[tests] Installing frontend dependencies via npm ci ..."
+  # IMPORTANT: acceptance must reconcile the complete lockfile; file-presence
+  # shortcuts can silently reuse an invalid or stale development dependency tree.
+  echo "[tests] Reconciling frontend dependencies via npm ci ..."
   npm ci
 }
 
@@ -199,6 +198,9 @@ echo "[tests] 0/11 supply-chain hardening check"
 "$VENV_PY" scripts/check_supply_chain_hardening.py
 
 ensure_npm_deps
+
+echo "[tests] 0.25/11 frontend dependency audit"
+npm audit --audit-level=high
 
 echo "[tests] 0.5/11 static analysis policy"
 "$VENV_PY" scripts/verify_static_analysis_policy.py

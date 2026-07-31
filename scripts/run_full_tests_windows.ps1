@@ -58,12 +58,9 @@ Require-Cmd node
 Require-Cmd npm
 
 function Ensure-NpmDeps {
-  $playwrightPkg = Join-Path $root "node_modules\@playwright\test\package.json"
-  if (Test-Path $playwrightPkg) {
-    return
-  }
-
-  Write-Host "[tests] Installing frontend dependencies via npm ci ..."
+  # IMPORTANT: acceptance must reconcile the complete lockfile; file-presence
+  # shortcuts can silently reuse an invalid or stale development dependency tree.
+  Write-Host "[tests] Reconciling frontend dependencies via npm ci ..."
   Invoke-Checked "npm ci" { npm ci }
 }
 
@@ -276,6 +273,8 @@ Invoke-Checked "supply-chain hardening check" {
   & $venvPython scripts\check_supply_chain_hardening.py
 }
 Ensure-NpmDeps
+Write-Host "[tests] 0.25/11 frontend dependency audit"
+Invoke-Checked "npm audit" { npm audit --audit-level=high }
 
 Write-Host "[tests] 0.5/11 static analysis policy"
 Invoke-Checked "static analysis policy" {

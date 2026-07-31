@@ -359,6 +359,10 @@ fi
 echo "[pre-push] Node version: $(node -v)"
 echo "[pre-push] 0/10 supply-chain hardening check"
 "$VENV_PY" scripts/check_supply_chain_hardening.py
+echo "[pre-push] 0.25/10 frontend dependency install and audit"
+# IMPORTANT: never accept a warmed or manually changed node_modules tree.
+npm ci
+npm audit --audit-level=high
 echo "[pre-push] 0/7 R120 dependency preflight"
 "$VENV_PY" scripts/preflight_check.py --strict
 echo "[pre-push] 1/7 detect-secrets"
