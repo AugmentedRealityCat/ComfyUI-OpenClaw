@@ -4,7 +4,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
 ROOT = Path(__file__).resolve().parents[1]
 GATE_PATH = ROOT / "scripts" / "run_adversarial_gate.py"
 
@@ -116,10 +115,13 @@ class AdversarialBootstrapClassificationTests(unittest.TestCase):
 
     def test_explicit_profiles_take_precedence_without_diff_discovery(self):
         for requested in ("smoke", "extended"):
-            with self.subTest(requested=requested), patch.object(
-                self.gate,
-                "_collect_changed_files",
-                side_effect=AssertionError("explicit profile inspected diff"),
+            with (
+                self.subTest(requested=requested),
+                patch.object(
+                    self.gate,
+                    "_collect_changed_files",
+                    side_effect=AssertionError("explicit profile inspected diff"),
+                ),
             ):
                 self.assertEqual(
                     self.gate._resolve_effective_profile(
@@ -180,8 +182,9 @@ class AdversarialBootstrapClassificationTests(unittest.TestCase):
             calls.append((command, kwargs))
             return subprocess.CompletedProcess(command, 1, stdout="", stderr="bad ref")
 
-        with patch.object(self.gate.shutil, "which", return_value="git"), patch.object(
-            self.gate.subprocess, "run", side_effect=fail_git
+        with (
+            patch.object(self.gate.shutil, "which", return_value="git"),
+            patch.object(self.gate.subprocess, "run", side_effect=fail_git),
         ):
             self.assertEqual(self.gate._run_git_diff(hostile_base, hostile_head), [])
 
